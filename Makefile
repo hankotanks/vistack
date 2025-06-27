@@ -3,7 +3,7 @@ LIB := vistack
 CC := gcc
 AR := ar
 
-EXAMPLES := cblas_example1
+EXAMPLES := flame_example
 
 CFLAGS := -Wall -Wextra -Wconversion -Wpedantic -DLOGGING
 
@@ -16,31 +16,22 @@ DIR_INC := $(DIR)/include
 DIR_SRC := $(DIR)/src
 DIR_OBJ := $(DIR)/build
 DIR_BIN := $(DIR)/bin
+DIR_EXT := $(DIR)/ext
+DIR_LIB := $(DIR)/lib
 ifeq ($(OS), Windows_NT)
-	DIR_LIB := $(DIR_BIN)/$(LIB).lib
+	DIR_LIB_FULL := $(DIR_LIB)/$(LIB).lib
 else
-	DIR_LIB := $(DIR_BIN)/lib$(LIB).a
+	DIR_LIB_FULL := $(DIR_LIB)/lib$(LIB).a
 endif
 
-CFLAGS += -I$(DIR_INC)
-LDLIBS := -l$(LIB)
+CFLAGS += -I$(DIR_INC) -isystem$(DIR_EXT)
+LDLIBS := -l$(LIB) -lflame -lm
 
-LDFLAGS := -L$(DIR_BIN)
+LDFLAGS := -L$(DIR)/lib
 
-EXT_CBLAS ?= 0
-ifeq ($(EXT_CBLAS), 0)
-	DIR_CBLAS := $(DIR)/OpenBLAS/lapack-netlib/CBLAS
-	DIR_CBLAS_INC := $(DIR_CBLAS)/include
-	DIR_CBLAS_SRC := $(DIR_CBLAS)/src
-	ifeq ($(OS), Windows_NT)
-		DIR_CBLAS_LIB := $(DIR_BIN)/cblas.lib
-	else
-		DIR_CBLAS_LIB := $(DIR_BIN)/libcblas.a
-	endif
-	CFLAGS += -isystem$(DIR_CBLAS_INC)
-	LDLIBS += -lcblas -lblas
-else
-	LDLIBS += -lopenblas
+EXT_FLAME ?= 0
+ifeq ($(EXT_FLAME), 0)
+	DIR_FLAME := $(DIR)/libflame
 endif
 
 #
@@ -49,31 +40,35 @@ endif
 
 all: lib examples
 
-examples: cblas lib $(EXAMPLES)
+examples: flame lib $(EXAMPLES)
 
 $(EXAMPLES):
 	$(CC) $(CFLAGS) $(DIR)/examples/$@.c -o $(DIR_BIN)/$@ -l$(LIB) $(LDFLAGS) $(LDLIBS)
 
-lib: cblas $(patsubst $(DIR_SRC)/%.c, $(DIR_OBJ)/%.o, $(wildcard $(DIR_SRC)/*.c))
-	$(AR) rcs $(DIR_LIB) $(filter-out $(firstword $^), $^)
+lib: flame $(patsubst $(DIR_SRC)/%.c, $(DIR_OBJ)/%.o, $(wildcard $(DIR_SRC)/*.c))
+	$(AR) rcs $(DIR_LIB_FULL) $(filter-out $(firstword $^), $^)
 
 $(DIR_OBJ)/%.o: $(DIR_SRC)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@ $(LDFLAGS) $(LDLIBS)
 
-ifeq ($(EXT_CBLAS), 0)
-cblas:
-	@-$(MAKE) -s -k -C $(DIR_CBLAS_SRC) CBLASLIB=$(DIR_CBLAS_LIB)
+ifeq ($(EXT_FLAME), 0)
+flame:
+	$(MAKE) -C $(DIR_FLAME)
+	$(MAKE) install -C $(DIR_FLAME)
+init:
+	cd $(DIR_FLAME) && ./configure --enable-builtin-blas --enable-cblas-interfaces --disable-non-critical-code --libdir=$(DIR_LIB) --includedir=$(DIR_EXT)
 else
-cblas:
+flame:
+init:
 endif
 
-ifeq ($(EXT_CBLAS), 0)
+ifeq ($(EXT_FLAME), 0)
 clean:
 	$(RM) -r $(DIR_OBJ)/*.o
-	@-$(MAKE) cleanobj -s -k -C $(DIR_CBLAS_SRC)
+	$(MAKE) clean -C $(DIR_FLAME)
 else
 clean:
 	$(RM) -r $(DIR_OBJ)/*.o
 endif
 
-.PHONY: all examples lib cblas clean
+.PHONY: all examples lib flame init clean
