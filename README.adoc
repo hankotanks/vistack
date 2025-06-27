@@ -1,0 +1,10 @@
+[source,sh]
+----
+#!/bin/bash
+sudo apt-get install libblas-dev
+git clone https://github.com/hankotanks/photogram.h.git
+cd photogram.h
+git submodule update --init --recursive
+# make lib # generates libprotogram.a/photogram.lib in /bin
+make 
+----
