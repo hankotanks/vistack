@@ -1,10 +1,24 @@
+== Building
+
 [source,sh]
 ----
 #!/bin/bash
 sudo apt-get install libblas-dev
-git clone https://github.com/hankotanks/photogram.h.git
-cd photogram.h
+git clone https://github.com/hankotanks/vistack.git
+cd vistack
 git submodule update --init --recursive
-# make lib # generates libprotogram.a/photogram.lib in /bin
 make 
 ----
+
+.Alternative (if OpenBLAS is installed)
+[source,sh]
+----
+#!/bin/bash
+sudo apt-get install libopenblas-dev
+git clone https://github.com/hankotanks/vistack.git
+cd vistack
+make EXT_CBLAS=1
+----
+
+To improve portability, BLAS is this library's only direct dependency. By default, CBLAS is built automatically.
+However, OpenBLAS can replace this dependency if `EXT_CBLAS=1` is specified.
