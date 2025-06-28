@@ -52,6 +52,7 @@ $(DIR_OBJ)/%.o: $(DIR_SRC)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@ $(LDFLAGS) $(LDLIBS)
 
 init: flame-init
+	mkdir $(DIR_BIN) $(DIR_OBJ) $(DIR_LIB)
 
 clean: flame-clean
 	$(RM) -r $(DIR_OBJ)/*.o
@@ -62,6 +63,7 @@ flame:
 	$(MAKE) install -C $(DIR_FLAME)
 flame-init:
 	cd $(DIR_FLAME) && ./configure --disable-non-critical-code --libdir=$(DIR_LIB) --includedir=$(DIR_EXT)
+	rm $(DIR_FLAME)/ar_obj_list
 flame-clean:
 	$(MAKE) clean -C $(DIR_FLAME)
 else
