@@ -11,6 +11,10 @@ CFLAGS := -Wall -Wextra -Wconversion -Wpedantic -DLOGGING
 #
 #
 
+ifeq ($(OS), Windows_NT)
+	$(error Windows is unsupported. Exiting.)
+endif
+
 DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 DIR_INC := $(DIR)/include
 DIR_SRC := $(DIR)/src
@@ -18,14 +22,10 @@ DIR_OBJ := $(DIR)/build
 DIR_BIN := $(DIR)/bin
 DIR_EXT := $(DIR)/ext
 DIR_LIB := $(DIR)/lib
-ifeq ($(OS), Windows_NT)
-	DIR_LIB_FULL := $(DIR_LIB)/$(LIB).lib
-else
-	DIR_LIB_FULL := $(DIR_LIB)/lib$(LIB).a
-endif
+DIR_LIB_FULL := $(DIR_LIB)/lib$(LIB).a
 
 CFLAGS += -I$(DIR_INC) -isystem$(DIR_EXT)
-LDLIBS := -l$(LIB) -lflame -lm
+LDLIBS := -l$(LIB) -lflame -lblas -lm
 
 LDFLAGS := -L$(DIR)/lib
 
@@ -51,24 +51,23 @@ lib: flame $(patsubst $(DIR_SRC)/%.c, $(DIR_OBJ)/%.o, $(wildcard $(DIR_SRC)/*.c)
 $(DIR_OBJ)/%.o: $(DIR_SRC)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@ $(LDFLAGS) $(LDLIBS)
 
+init: flame-init
+
+clean: flame-clean
+	$(RM) -r $(DIR_OBJ)/*.o
+
 ifeq ($(EXT_FLAME), 0)
 flame:
 	$(MAKE) -C $(DIR_FLAME)
 	$(MAKE) install -C $(DIR_FLAME)
-init:
-	cd $(DIR_FLAME) && ./configure --enable-builtin-blas --enable-cblas-interfaces --disable-non-critical-code --libdir=$(DIR_LIB) --includedir=$(DIR_EXT)
-else
-flame:
-init:
-endif
-
-ifeq ($(EXT_FLAME), 0)
-clean:
-	$(RM) -r $(DIR_OBJ)/*.o
+flame-init:
+	cd $(DIR_FLAME) && ./configure --disable-non-critical-code --libdir=$(DIR_LIB) --includedir=$(DIR_EXT)
+flame-clean:
 	$(MAKE) clean -C $(DIR_FLAME)
 else
-clean:
-	$(RM) -r $(DIR_OBJ)/*.o
+flame:
+flame-init:
+flame-clean:
 endif
 
-.PHONY: all examples lib flame init clean
+.PHONY: all examples lib init flame flame-init flame-clean clean

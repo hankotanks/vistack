@@ -7,18 +7,18 @@ sudo apt-get install libblas-dev
 git clone https://github.com/hankotanks/vistack.git
 cd vistack
 git submodule update --init --recursive
-make 
+make init && make
 ----
 
-.Alternative (if OpenBLAS is installed)
+.Alternative (if `libflame` is installed)
 [source,sh]
 ----
 #!/bin/bash
-sudo apt-get install libopenblas-dev
+sudo apt-get install libflame-dev
 git clone https://github.com/hankotanks/vistack.git
 cd vistack
-make EXT_CBLAS=1
+make init EXT_FLAME=1 && make EXT_FLAME=1
 ----
 
-To improve portability, BLAS is this library's only direct dependency. By default, CBLAS is built automatically.
-However, OpenBLAS can replace this dependency if `EXT_CBLAS=1` is specified.
+To improve portability, BLAS is this project's only direct dependency. 
+Specify `EXT_FLAME=1` to prevent building `libflame` internally.
