@@ -38,31 +38,43 @@ endif
 #
 #
 
+.PHONY: all
 all: lib examples
 
+.PHONY: examples
 examples: flame lib $(EXAMPLES)
 
 $(EXAMPLES):
-	$(CC) $(CFLAGS) $(DIR)/examples/$@.c -o $(DIR_BIN)/$@ -l$(LIB) $(LDFLAGS) $(LDLIBS)
+	$(CC) $(CFLAGS) $(DIR)/examples/$@.c -o $(DIR_BIN)/$@ \
+	-l$(LIB) $(LDFLAGS) $(LDLIBS)
 
-lib: flame $(patsubst $(DIR_SRC)/%.c, $(DIR_OBJ)/%.o, $(wildcard $(DIR_SRC)/*.c))
+.PHONY: lib
+lib: flame \
+$(patsubst $(DIR_SRC)/%.c, $(DIR_OBJ)/%.o, $(wildcard $(DIR_SRC)/*.c))
 	$(AR) rcs $(DIR_LIB_FULL) $(filter-out $(firstword $^), $^)
 
 $(DIR_OBJ)/%.o: $(DIR_SRC)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@ $(LDFLAGS) $(LDLIBS)
 
-init: flame-init
+.PHONY: init
+init: dir flame-init lib examples
+
+.PHONY: dir
+dir:
 	mkdir $(DIR_BIN) $(DIR_OBJ) $(DIR_LIB)
 
+.PHONY: clean
 clean: flame-clean
 	$(RM) -r $(DIR_OBJ)/*.o
 
+.PHONY: flame flame-init flame-clean
 ifeq ($(EXT_FLAME), 0)
 flame:
 	$(MAKE) -C $(DIR_FLAME)
 	$(MAKE) install -C $(DIR_FLAME)
 flame-init:
-	cd $(DIR_FLAME) && ./configure --disable-non-critical-code --libdir=$(DIR_LIB) --includedir=$(DIR_EXT)
+	cd $(DIR_FLAME) && ./configure --disable-non-critical-code \
+	--libdir=$(DIR_LIB) --includedir=$(DIR_EXT)
 	rm $(DIR_FLAME)/ar_obj_list
 flame-clean:
 	$(MAKE) clean -C $(DIR_FLAME)
@@ -71,5 +83,3 @@ flame:
 flame-init:
 flame-clean:
 endif
-
-.PHONY: all examples lib init flame flame-init flame-clean clean
