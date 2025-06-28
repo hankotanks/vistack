@@ -61,7 +61,7 @@ init: dir flame-init lib examples
 
 .PHONY: dir
 dir:
-	mkdir $(DIR_BIN) $(DIR_OBJ) $(DIR_LIB)
+	mkdir -p $(DIR_BIN) $(DIR_OBJ) $(DIR_LIB)
 
 .PHONY: clean
 clean: flame-clean
@@ -72,10 +72,10 @@ ifeq ($(EXT_FLAME), 0)
 flame:
 	$(MAKE) -C $(DIR_FLAME)
 	$(MAKE) install -C $(DIR_FLAME)
+	$(RM) $(DIR_FLAME)/ar_obj_list
 flame-init:
 	cd $(DIR_FLAME) && ./configure --disable-non-critical-code \
 	--libdir=$(DIR_LIB) --includedir=$(DIR_EXT)
-	rm $(DIR_FLAME)/ar_obj_list
 flame-clean:
 	$(MAKE) clean -C $(DIR_FLAME)
 else
