@@ -6,12 +6,11 @@
 #include <FLAME.h>
 #include "FLA.h"
 #include "image.h"
-#include "log.h"
 
 long 
 reflect(long x, long max) {
     if(x < 0) return -x;
-    if (x >= max) return 2 * max - x - 2;
+    if (x >= max) return max * 2 - x - 2;
     return x;
 }
 
@@ -33,9 +32,9 @@ convolve(FLA_Obj i, FLA_Obj j, FLA_Obj k) {
         for(ky = -1, sum = 0.0; ky <= 1; ++ky) for(kx = -1; kx <= 1; ++kx) {
             ix = reflect(dx + kx, cc);
             iy = reflect(dy + ky, rc);
-            sum += i_buf[(size_t) (ix * ld + iy)] * k_buf[(size_t) (ky * 3 + kx + 4)];
+            sum += i_buf[(size_t) (iy * ld + ix)] * k_buf[(size_t) (ky * 3 + kx + 4)];
         }
-        j_buf[dx * ld + dy] = sum;
+        j_buf[dy * ld + dx] = sum;
     }
 }
 
@@ -45,20 +44,8 @@ sum_kernel(FLA_Obj mat, size_t x, size_t y) {
     buf = (double*) FLA_Obj_buffer_at_view(mat);
     size_t dy, dx, ld = (size_t) FLA_Obj_col_stride(mat);
     for(dy = y - 1; dy <= y + 1; ++dy) for(dx = x - 1; dx <= x + 1; ++dx)
-        sum += buf[dx * ld + dy];
+        sum += buf[dy * ld + dx];
     return sum;
-}
-
-unsigned int
-eig_vals(double a, double b, double c, double d, double* fst, double* snd) {
-    double trace = a + d;
-    double det = a * d - b * c;
-    double disc = trace * trace - 4 * det;
-    if(disc < 0) return 1;
-    double root = sqrt(disc);
-    *fst = 0.5 * (trace + root);
-    *snd = 0.5 * (trace - root);
-    return 0;
 }
 
 vi_HarrisCorners
@@ -103,16 +90,14 @@ vi_HarrisCorners_from_ImageIntensity(vi_ImageIntensity img, double t) {
     FLA_Scal_elemwise(FLA_NO_TRANSPOSE, jxx, jxx);
     FLA_Scal_elemwise(FLA_NO_TRANSPOSE, jyy, jyy);
     // declare M matrices
-    FLA_Obj mxx, myy, mxy, myx;
+    FLA_Obj mxx, myy, mxy;
     FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, mat, &mxx);
     FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, mat, &myy);
     FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, mat, &mxy);
-    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, mat, &myx);
-    double* mxx_buf,* myy_buf,* mxy_buf,* myx_buf;
+    double* mxx_buf,* myy_buf,* mxy_buf;
     mxx_buf = (double*) FLA_Obj_buffer_at_view(mxx);
     myy_buf = (double*) FLA_Obj_buffer_at_view(myy);
     mxy_buf = (double*) FLA_Obj_buffer_at_view(mxy);
-    myx_buf = (double*) FLA_Obj_buffer_at_view(myx);
     size_t rc, cc, ld;
     rc = (size_t) FLA_Obj_length(mat);
     cc = (size_t) FLA_Obj_width(mat); 
@@ -121,16 +106,15 @@ vi_HarrisCorners_from_ImageIntensity(vi_ImageIntensity img, double t) {
 
     // zero the edges of the M matrices
     for(dx = 0; dx < cc; ++dx) {
-        mxx_buf[dx * ld] = 0.0;
-        mxx_buf[dx * ld + rc - 1] = 0.0;
+        mxx_buf[dx] = 0.0;
+        mxx_buf[dx + ld * (rc - 1)] = 0.0;
     }
     for(dy = 1; dy < rc - 1; ++dy) {
-        mxx_buf[dy] = 0.0;
-        mxx_buf[(cc - 1) * ld + dy] = 0.0;
+        mxx_buf[dy * ld] = 0.0;
+        mxx_buf[dy * ld + cc - 1] = 0.0;
     }
     FLA_Copy(mxx, myy);  
-    FLA_Copy(mxx, mxy);  
-    FLA_Copy(mxx, myx);  
+    FLA_Copy(mxx, mxy);
     FLA_Obj r;
     FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, mat, &r);
     FLA_Copy(mxx, r);
@@ -138,11 +122,10 @@ vi_HarrisCorners_from_ImageIntensity(vi_ImageIntensity img, double t) {
 
     // calculate M values
     for(dy = 1; dy < rc - 1; ++dy) for(dx = 1; dx < cc - 1; ++dx) {
-        id = dx * ld + dy;
+        id = dy * ld + dx;
         mxx_buf[id] = sum_kernel(jxx, dx, dy);
         myy_buf[id] = sum_kernel(jyy, dx, dy);
         mxy_buf[id] = sum_kernel(jxy, dx, dy);
-        myx_buf[id] = sum_kernel(jyx, dx, dy);
     }
     FLA_Obj_free(&jxx);
     FLA_Obj_free(&jyy);
@@ -150,26 +133,26 @@ vi_HarrisCorners_from_ImageIntensity(vi_ImageIntensity img, double t) {
     FLA_Obj_free(&jyx);
 
     // calculate R values
-    double* r_buf = (double*) FLA_Obj_buffer_at_view(r), eig_fst, eig_snd;
+    double* r_buf = (double*) FLA_Obj_buffer_at_view(r);
     for(dy = 1; dy < rc - 1; ++dy) for(dx = 1; dx < cc - 1; ++dx) {
-        id = dx * ld + dy;
-        eig_vals(mxx_buf[id], mxy_buf[id], myx_buf[id], myy_buf[id], &eig_fst, &eig_snd);
-        r_buf[id] = eig_fst * eig_snd - (eig_fst + eig_snd) * (eig_fst + eig_snd) * 0.05;
+        id = dy * ld + dx;
+        r_buf[id] = (mxx_buf[id] * myy_buf[id] - mxy_buf[id] * mxy_buf[id]) - \
+            (mxx_buf[id] + myy_buf[id]) * (mxx_buf[id] + myy_buf[id]) * 0.05;
     }
     FLA_Obj_free(&mxx);
     FLA_Obj_free(&myy);
     FLA_Obj_free(&mxy);
-    FLA_Obj_free(&myx);
 
     // normalize and filter R values
     double minima = DBL_MAX, maxima = DBL_MIN, v;
     for(dy = 0; dy < rc; ++dy) for(dx = 0; dx < cc; ++dx) {
-        v = r_buf[dx * ld + dy];
+        v = r_buf[dy * ld + dx];
+        if(v < 0.0) continue;
         minima = (minima > v) ? v : minima;
         maxima = (maxima < v) ? v : maxima;
     }
     for(dy = 0; dy < rc; ++dy) for(dx = 0; dx < cc; ++dx) {
-        v = r_buf[dx * ld + dy];
+        v = r_buf[dy * ld + dx];
         v = (v - minima) / (maxima - minima);
         if(v > t) {
             stbds_arrput(corners.corners, dx);

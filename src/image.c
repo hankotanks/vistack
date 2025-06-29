@@ -39,7 +39,7 @@ vi_ImageIntensity_from_ImageRaw(const vi_ImageRaw img) {
     double* buf = (double*) img_i->buf;
     for(size_t i = 0, j; i < img->w * img->h; ++i) {
         for(j = 0; j < img->c; ++j) buf[i] += (double) img->buf[i * img->c + j];
-        buf[i] /= (double) img->c * 255.f;
+        buf[i] /= (double) img->c * 255.0;
     }
     return img_i;
 }
@@ -149,8 +149,8 @@ void
 pts_render_preamble(vi_ImageIntensity img, size_t* corners, size_t count, GLuint buf[static 3], GLuint* shader) {
     float* corners_ndc = malloc(sizeof(float) * 2 * count);
     for (size_t i = 0; i < count; i++) {
-        corners_ndc[i * 2 + 1] = 2.f * ((float) corners[i * 2]   / (float) img->w) - 1.f;
-        corners_ndc[i * 2] = 1.f - 2.f * ((float) corners[i * 2 + 1] / (float) img->h);
+        corners_ndc[i * 2] = 2.f * ((float) corners[i * 2] / (float) img->w) - 1.f;
+        corners_ndc[i * 2 + 1] = 1.f - 2.f * ((float) corners[i * 2 + 1] / (float) img->h);
     }
 
     const char* vert_src =
