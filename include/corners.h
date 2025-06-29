@@ -8,6 +8,6 @@ typedef struct {
 } vi_HarrisCorners;
 
 vi_HarrisCorners
-vi_HarrisCorners_from_ImageIntensity(vi_ImageIntensity img, float t);
+vi_HarrisCorners_from_ImageIntensity(vi_ImageIntensity img, double t);
 
 #endif // __CORNERS_H__

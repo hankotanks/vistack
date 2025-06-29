@@ -13,7 +13,7 @@ struct __IMAGE_H__vi_ImageRaw {
 
 struct __IMAGE_H__vi_ImageIntensity {
     size_t w, h;
-    const float buf[];
+    const double buf[];
 };
 
 vi_ImageRaw 
@@ -32,19 +32,19 @@ vi_ImageRaw_load(const char* path) {
 
 vi_ImageIntensity 
 vi_ImageIntensity_from_ImageRaw(const vi_ImageRaw img) {
-    vi_ImageIntensity img_i = malloc(sizeof(struct __IMAGE_H__vi_ImageIntensity) + (size_t) (img->w * img->h) * sizeof(float));
+    vi_ImageIntensity img_i = malloc(sizeof(struct __IMAGE_H__vi_ImageIntensity) + (size_t) (img->w * img->h) * sizeof(double));
     ASSERT_LOG(img_i != NULL, "Failed to allocate memory for image intensity.");
     img_i->w = img->w;
     img_i->h = img->h;
-    float* buf = (float*) img_i->buf;
+    double* buf = (double*) img_i->buf;
     for(size_t i = 0, j; i < img->w * img->h; ++i) {
-        for(j = 0; j < img->c; ++j) buf[i] += (float) img->buf[i * img->c + j];
-        buf[i] /= (float) img->c * 255.f;
+        for(j = 0; j < img->c; ++j) buf[i] += (double) img->buf[i * img->c + j];
+        buf[i] /= (double) img->c * 255.f;
     }
     return img_i;
 }
 
-const float* 
+const double* 
 vi_ImageIntensity_buffer(vi_ImageIntensity img) {
     return img->buf;
 }
@@ -72,7 +72,7 @@ vi_ImageIntensity_show(vi_ImageIntensity img) {
         "out vec4 FragColor;\n"
         "uniform sampler2D tex;\n"
         "void main() {\n"
-        "    float v = texture(tex, TexCoord).r;\n"
+        "    double v = texture(tex, TexCoord).r;\n"
         "    FragColor = vec4(v, v, v, 1.0);\n"
         "}\n";
     // create shaders
@@ -98,7 +98,7 @@ vi_ImageIntensity_show(vi_ImageIntensity img) {
     glDeleteShader(vert);
     glDeleteShader(frag);
     // declare quad geometry
-    const float quad_vertices[] = { 
+    const double quad_vertices[] = { 
         -1.f, -1.f, 0.f, 1.f,
          1.f, -1.f, 1.f, 1.f,
          1.f,  1.f, 1.f, 0.f,
@@ -115,9 +115,9 @@ vi_ImageIntensity_show(vi_ImageIntensity img) {
     glBufferData(GL_ARRAY_BUFFER, sizeof(quad_vertices), quad_vertices, GL_STATIC_DRAW);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(quad_indices), quad_indices, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, NULL);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(double) * 4, NULL);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*) (sizeof(float) * 2));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(double) * 4, (void*) (sizeof(double) * 2));
     glEnableVertexAttribArray(1);
     // texture initialization
     GLuint img_tex_id;
@@ -164,8 +164,7 @@ vi_ImageIntensity_cols(vi_ImageIntensity img) {
 FLA_Obj
 vi_ImageIntensity_to_Obj(vi_ImageIntensity img) {
     FLA_Obj mat;
-    FLA_Obj_create(FLA_FLOAT, img->h, img->w, 0, 0, &mat);
-    memcpy(FLA_Obj_buffer_at_view(mat), img->buf, img->w * img->h * sizeof(float));
+    FLA_Obj_create(FLA_DOUBLE, img->h, img->w, 0, 0, &mat);
+    memcpy(FLA_Obj_buffer_at_view(mat), img->buf, img->w * img->h * sizeof(double));
     return mat;
 }
-

@@ -12,7 +12,7 @@ vi_ImageRaw_load(const char* path);
 vi_ImageIntensity 
 vi_ImageIntensity_from_ImageRaw(const vi_ImageRaw img);
 
-const float* 
+const double* 
 vi_ImageIntensity_buffer(vi_ImageIntensity img);
 
 void 
