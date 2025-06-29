@@ -3,7 +3,7 @@ LIB := vistack
 CC := gcc
 AR := ar
 
-EXAMPLES := flame_example
+EXAMPLES := flame_example image_test
 
 CFLAGS := -Wall -Wextra -Wconversion -Wpedantic -DLOGGING
 
@@ -46,7 +46,7 @@ examples: flame lib $(EXAMPLES)
 
 $(EXAMPLES):
 	$(CC) $(CFLAGS) $(DIR)/examples/$@.c -o $(DIR_BIN)/$@ \
-	-l$(LIB) $(LDFLAGS) $(LDLIBS)
+	-l$(LIB) $(LDFLAGS) $(LDLIBS) $(shell $(MAKE) get_bin_flags -s -C glenv)
 
 .PHONY: lib
 lib: flame \
@@ -54,7 +54,7 @@ $(patsubst $(DIR_SRC)/%.c, $(DIR_OBJ)/%.o, $(wildcard $(DIR_SRC)/*.c))
 	$(AR) rcs $(DIR_LIB_FULL) $(filter-out $(firstword $^), $^)
 
 $(DIR_OBJ)/%.o: $(DIR_SRC)/%.c
-	$(CC) $(CFLAGS) -c $< -o $@ $(LDFLAGS) $(LDLIBS)
+	$(CC) $(CFLAGS) -c $< -o $@ $(shell $(MAKE) get_obj_flags -s -C glenv) $(LDFLAGS) $(LDLIBS)
 
 .PHONY: init
 init: dir flame-init lib examples
