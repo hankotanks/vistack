@@ -1,14 +1,14 @@
 #include "corners.h"
 #include "image.h"
+#include "plot.h"
 #include <stdlib.h>
 #include <stdio.h>
-#include <glenv.h>
 #include <stb_ds.h>
+#include <glenv.h>
 #include <vistack.h>
 
 #define HARRIS_THRESHOLD 0.5f
 #define HARRIS_NMS 5
-#define HARRIS_PRINT_CORNERS
 
 int main(int argc, char* argv[]) {
     if(argc != 2) {
@@ -16,15 +16,15 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     vi_ImageRaw temp = vi_ImageRaw_load(argv[1]);
-    vi_ImageIntensity img = vi_ImageIntensity_from_ImageRaw(temp);
+    vi_ImageIntensity image = vi_ImageIntensity_from_ImageRaw(temp);
     free(temp);
-    vi_HarrisCorners corners = vi_HarrisCorners_from_ImageIntensity(img, HARRIS_THRESHOLD, HARRIS_NMS);
-#ifdef HARRIS_PRINT_CORNERS
-    for(size_t i = 0; i < corners.corner_count; ++i) 
-        printf("[%zu, %zu]\n", corners.corners[i * 2], corners.corners[i * 2 + 1]);
-#endif
-    vi_ImageIntensity_show(img, corners.corners, corners.corner_count);
-    stbds_arrfree(corners.corners);
-    free(img);
+    const size_t* corners = vi_harris_corners_compute(image, HARRIS_THRESHOLD, HARRIS_NMS);
+    vi_Plot plot = vi_Plot_init();
+    vi_Plot_add_layer(plot, vi_ImageIntensity_plotter(image));
+    vi_Plot_add_layer(plot, vi_harris_corners_plotter(image, corners));
+    vi_Plot_show(plot);
+    vi_Plot_free(plot);
+    stbds_arrfree(corners);
+    free(image);
     return 0;
 }
