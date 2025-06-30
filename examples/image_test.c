@@ -6,7 +6,9 @@
 #include <stb_ds.h>
 #include <vistack.h>
 
-#define HARRIS_THRESHOLD 0.3f
+#define HARRIS_THRESHOLD 0.5f
+#define HARRIS_NMS 5
+#define HARRIS_PRINT_CORNERS
 
 int main(int argc, char* argv[]) {
     if(argc != 2) {
@@ -16,8 +18,8 @@ int main(int argc, char* argv[]) {
     vi_ImageRaw temp = vi_ImageRaw_load(argv[1]);
     vi_ImageIntensity img = vi_ImageIntensity_from_ImageRaw(temp);
     free(temp);
-    vi_HarrisCorners corners = vi_HarrisCorners_from_ImageIntensity(img, HARRIS_THRESHOLD);
-#if 1
+    vi_HarrisCorners corners = vi_HarrisCorners_from_ImageIntensity(img, HARRIS_THRESHOLD, HARRIS_NMS);
+#ifdef HARRIS_PRINT_CORNERS
     for(size_t i = 0; i < corners.corner_count; ++i) 
         printf("[%zu, %zu]\n", corners.corners[i * 2], corners.corners[i * 2 + 1]);
 #endif

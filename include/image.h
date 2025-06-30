@@ -33,5 +33,11 @@ vi_ImageIntensity_to_Obj(vi_ImageIntensity img);
 vi_ImageIntensity
 vi_ImageIntensity_from_Obj(FLA_Obj mat);
 
+#define VI_IMAGE_INTENSITY_SHOW_OBJ(_obj) {\
+    vi_ImageIntensity _obj##_temp = vi_ImageIntensity_from_Obj(_obj);\
+    vi_ImageIntensity_show(_obj##_temp, NULL, 0);\
+    free(_obj##_temp);\
+}
+
 #endif // __IMAGE_H__
 

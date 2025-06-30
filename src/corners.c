@@ -1,143 +1,127 @@
 #include "corners.h"
+#include <X11/Xlib.h>
 #include <stddef.h>
+#include <stdbool.h>
 #include <float.h>
 #define STB_DS_IMPLEMENTATION
 #include <stb_ds.h>
 #include <FLAME.h>
 #include "FLA.h"
 #include "image.h"
+#include "log.h"
 
-long 
-reflect(long x, long max) {
-    if(x < 0) return -x;
-    if (x >= max) return max * 2 - x - 2;
-    return x;
+size_t
+reflect(size_t x, size_t dx, size_t max) {
+    // assume baked in -1 offset to dx
+    long long idx = (long long) x + (long long) dx - 1;
+    if(idx < 0) return (size_t) (-idx);
+    if (idx >= (long long) max) return max * 2 - x - 2;
+    return (size_t) idx;
 }
 
 void 
 convolve(FLA_Obj i, FLA_Obj j, FLA_Obj k) {
-    long rc, cc, ld;
-    rc = (long) FLA_Obj_length(i);
-    cc = (long) FLA_Obj_width(i); 
-    ld = (long) FLA_Obj_col_stride(i);
-
-    double* i_buf,* k_buf,* j_buf;
-    i_buf = (double*) FLA_Obj_buffer_at_view(i);
-    j_buf = (double*) FLA_Obj_buffer_at_view(j);
-    k_buf = (double*) FLA_Obj_buffer_at_view(k);
-
     double sum;
-    long dx, dy, kx, ky, ix, iy;
-    for(dy = 0; dy < rc; ++dy) for(dx = 0; dx < cc; ++dx) {
-        for(ky = -1, sum = 0.0; ky <= 1; ++ky) for(kx = -1; kx <= 1; ++kx) {
-            ix = reflect(dx + kx, cc);
-            iy = reflect(dy + ky, rc);
-            sum += i_buf[(size_t) (iy * ld + ix)] * k_buf[(size_t) (ky * 3 + kx + 4)];
+    size_t dx, dy, kx, ky, ix, iy;
+    for(dy = 0; dy < FLA_OBJ_H(i); ++dy) for(dx = 0; dx < FLA_OBJ_W(i); ++dx) {
+        for(ky = 0, sum = 0.0; ky < 3; ++ky) for(kx = 0; kx < 3; ++kx) {
+            ix = reflect(dx, kx, FLA_OBJ_W(i));
+            iy = reflect(dy, ky, FLA_OBJ_H(i));
+            sum += FLA_OBJ_GET(i, ix, iy) * FLA_OBJ_GET(k, kx, ky);
         }
-        j_buf[dy * ld + dx] = sum;
+        FLA_OBJ_GET(j, dx, dy) = sum;
     }
 }
 
 double 
 sum_kernel(FLA_Obj mat, size_t x, size_t y) {
-    double* buf, sum = 0.0;
-    buf = (double*) FLA_Obj_buffer_at_view(mat);
-    size_t dy, dx, ld = (size_t) FLA_Obj_col_stride(mat);
-    for(dy = y - 1; dy <= y + 1; ++dy) for(dx = x - 1; dx <= x + 1; ++dx)
-        sum += buf[dy * ld + dx];
+    double sum = 0.0;
+    for(size_t dy = y - 1, dx; dy <= y + 1; ++dy) for(dx = x - 1; dx <= x + 1; ++dx)
+        sum += FLA_OBJ_GET(mat, dx, dy);
     return sum;
 }
 
+bool
+local_maxima_test(FLA_Obj r, size_t x, size_t y, size_t s) {
+    s /= 2;
+    size_t dx, dy, xf, yf;
+    dy = (y > s) ? y - s : 0;
+    xf = ((x + s + 1) < FLA_OBJ_W(r)) ? (x + s + 1) : FLA_OBJ_W(r);
+    yf = ((y + s + 1) < FLA_OBJ_H(r)) ? (y + s + 1) : FLA_OBJ_H(r);
+    double rxy = FLA_OBJ_GET(r, x, y), rab;
+    LOG(LOG_INFO, "[%zu, %zu], x: [%zu, %zu], y: [%zu, %zu]", x, y, (x > s) ? x - s : 0, xf, dy, yf);
+    for(; dy < yf; ++dy) for(dx = (x > s) ? x - s : 0; dx < xf; ++dx) {
+        if(x == dx && y == dy) continue;
+        rab = FLA_OBJ_GET(r, dx, dy);
+        if(rab > rxy) return false;
+        if(rab == rxy && (dy < y || (dy == y && dx < x))) return false;
+    }
+    return true;
+}
+
 vi_HarrisCorners
-vi_HarrisCorners_from_ImageIntensity(vi_ImageIntensity img, double t) {
+vi_HarrisCorners_from_ImageIntensity(vi_ImageIntensity img, double t, size_t s) {
     vi_HarrisCorners corners = { .corners = NULL, .corner_count = 0 };
     FLA_Init();
     FLA_Obj mat = vi_ImageIntensity_to_Obj(img);
 
     // instantiate kernel
-    FLA_Obj temp;
-    FLA_Obj_create_constant(1.0 / 32.0, &temp);
+    FLA_Obj kx, ky;
     FLA_OBJ_INIT(kx, 3, 3, 
          3.0, 0.0,  -3.0,
         10.0, 0.0, -10.0,
          3.0, 0.0,  -3.0);
-    FLA_Scal(temp, kx);
-    FLA_Obj_free(&temp);
-    FLA_Obj ky;
+    FLA_OBJ_SCALE(kx, 1.0 / 32.0);
     FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, kx, &ky);
     FLA_Copy(kx, ky);    
     FLA_Transpose(ky);
 
     // declare gradients
-    FLA_Obj jxx, jyy;
+    FLA_Obj jxx, jxy, jyy;
     FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, mat, &jxx);
     FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, mat, &jyy);
+    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, mat, &jxy);
     convolve(mat, jxx, kx);
     convolve(mat, jyy, ky);
-#if 0
-    vi_ImageIntensity_show(vi_ImageIntensity_from_Obj(jxx), NULL, 0);
-    vi_ImageIntensity_show(vi_ImageIntensity_from_Obj(jyy), NULL, 0);
-#endif
+    FLA_Obj_free(&mat);
     FLA_Obj_free(&kx);
     FLA_Obj_free(&ky);
-    FLA_Obj jxy, jyx;
-    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, mat, &jxy);
-    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, mat, &jyx);
     FLA_Copy(jxx, jxy);
-    FLA_Copy(jyy, jyx);
     FLA_Scal_elemwise(FLA_NO_TRANSPOSE, jyy, jxy);
-    FLA_Scal_elemwise(FLA_NO_TRANSPOSE, jxx, jyx);
     FLA_Scal_elemwise(FLA_NO_TRANSPOSE, jxx, jxx);
     FLA_Scal_elemwise(FLA_NO_TRANSPOSE, jyy, jyy);
-    // declare M matrices
-    FLA_Obj mxx, myy, mxy;
-    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, mat, &mxx);
-    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, mat, &myy);
-    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, mat, &mxy);
-    double* mxx_buf,* myy_buf,* mxy_buf;
-    mxx_buf = (double*) FLA_Obj_buffer_at_view(mxx);
-    myy_buf = (double*) FLA_Obj_buffer_at_view(myy);
-    mxy_buf = (double*) FLA_Obj_buffer_at_view(mxy);
-    size_t rc, cc, ld;
-    rc = (size_t) FLA_Obj_length(mat);
-    cc = (size_t) FLA_Obj_width(mat); 
-    ld = (size_t) FLA_Obj_col_stride(mat);
-    size_t dx, dy, id;
-
-    // zero the edges of the M matrices
-    for(dx = 0; dx < cc; ++dx) {
-        mxx_buf[dx] = 0.0;
-        mxx_buf[dx + ld * (rc - 1)] = 0.0;
-    }
-    for(dy = 1; dy < rc - 1; ++dy) {
-        mxx_buf[dy * ld] = 0.0;
-        mxx_buf[dy * ld + cc - 1] = 0.0;
-    }
-    FLA_Copy(mxx, myy);  
-    FLA_Copy(mxx, mxy);
+    // declare M structure matrices
+    FLA_Obj mxx, mxy, myy;
+    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, jxx, &mxx);
+    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, jxy, &mxy);  
+    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, jyy, &myy);
+    FLA_Set(FLA_ZERO, mxx);
+    FLA_Set(FLA_ZERO, mxy);
+    FLA_Set(FLA_ZERO, myy);
+    
+    // instantiate R matrix
     FLA_Obj r;
-    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, mat, &r);
+    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, mxx, &r);
     FLA_Copy(mxx, r);
-    FLA_Obj_free(&mat);
 
     // calculate M values
-    for(dy = 1; dy < rc - 1; ++dy) for(dx = 1; dx < cc - 1; ++dx) {
-        id = dy * ld + dx;
-        mxx_buf[id] = sum_kernel(jxx, dx, dy);
-        myy_buf[id] = sum_kernel(jyy, dx, dy);
-        mxy_buf[id] = sum_kernel(jxy, dx, dy);
+    size_t dx, dy;
+    for(dy = 1; dy < FLA_OBJ_H(mxx) - 1; ++dy) for(dx = 1; dx < FLA_OBJ_W(mxx) - 1; ++dx) {
+        FLA_OBJ_GET(mxx, dx, dy) = sum_kernel(jxx, dx, dy);
+        FLA_OBJ_GET(myy, dx, dy) = sum_kernel(jyy, dx, dy);
+        FLA_OBJ_GET(mxy, dx, dy) = sum_kernel(jxy, dx, dy);
     }
     FLA_Obj_free(&jxx);
-    FLA_Obj_free(&jyy);
     FLA_Obj_free(&jxy);
-    FLA_Obj_free(&jyx);
+    FLA_Obj_free(&jyy);
 
     // calculate R values
-    double* r_buf = (double*) FLA_Obj_buffer_at_view(r);
-    for(dy = 1; dy < rc - 1; ++dy) for(dx = 1; dx < cc - 1; ++dx) {
-        id = dy * ld + dx;
-        r_buf[id] = (mxx_buf[id] * myy_buf[id] - mxy_buf[id] * mxy_buf[id]) - \
-            (mxx_buf[id] + myy_buf[id]) * (mxx_buf[id] + myy_buf[id]) * 0.05;
+    for(dy = 1; dy < FLA_OBJ_H(r) - 1; ++dy) for(dx = 1; dx < FLA_OBJ_W(r) - 1; ++dx) {
+        FLA_OBJ_GET(r, dx, dy) = \
+            (FLA_OBJ_GET(mxx, dx, dy) * FLA_OBJ_GET(myy, dx, dy)) - \
+            (FLA_OBJ_GET(mxy, dx, dy) * FLA_OBJ_GET(mxy, dx, dy)) - \
+            (FLA_OBJ_GET(mxx, dx, dy) + FLA_OBJ_GET(myy, dx, dy)) * \
+            (FLA_OBJ_GET(mxx, dx, dy) + FLA_OBJ_GET(myy, dx, dy)) * 0.05;
     }
     FLA_Obj_free(&mxx);
     FLA_Obj_free(&myy);
@@ -145,16 +129,16 @@ vi_HarrisCorners_from_ImageIntensity(vi_ImageIntensity img, double t) {
 
     // normalize and filter R values
     double minima = DBL_MAX, maxima = DBL_MIN, v;
-    for(dy = 0; dy < rc; ++dy) for(dx = 0; dx < cc; ++dx) {
-        v = r_buf[dy * ld + dx];
+    for(dy = 0; dy < FLA_OBJ_H(r); ++dy) for(dx = 0; dx < FLA_OBJ_W(r); ++dx) {
+        v = FLA_OBJ_GET(r, dx, dy);
         if(v < 0.0) continue;
         minima = (minima > v) ? v : minima;
         maxima = (maxima < v) ? v : maxima;
     }
-    for(dy = 0; dy < rc; ++dy) for(dx = 0; dx < cc; ++dx) {
-        v = r_buf[dy * ld + dx];
+    for(dy = 0; dy < FLA_OBJ_H(r); ++dy) for(dx = 0; dx < FLA_OBJ_W(r); ++dx) {
+        v = FLA_OBJ_GET(r, dx, dy);
         v = (v - minima) / (maxima - minima);
-        if(v > t) {
+        if(v > t && local_maxima_test(r, dx, dy, s)) {
             stbds_arrput(corners.corners, dx);
             stbds_arrput(corners.corners, dy);
             ++(corners.corner_count);

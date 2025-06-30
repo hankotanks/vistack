@@ -19,12 +19,13 @@ struct __IMAGE_H__vi_ImageIntensity {
 vi_ImageRaw 
 vi_ImageRaw_load(const char* path) {
     int w, h, c;
-    unsigned char* buf = stbi_load(path, &w, &h, &c, 3);
+    unsigned char* buf = stbi_load(path, &w, &h, &c, 0);
     ASSERT_LOG(buf != NULL, "Failed to open image [%s].", path);
     vi_ImageRaw img = malloc(sizeof(struct __IMAGE_H__vi_ImageRaw) + (size_t) (w * h * c));
     ASSERT_LOG(img != NULL, "Failed to allocate memory for image [%s],", path);
     img->w = (size_t) w;
     img->h = (size_t) h;
+    LOG(LOG_INFO, "%zu, %zu", img->w, img->h);
     img->c = (size_t) c;
     memcpy((unsigned char*) img->buf, buf, (size_t) (w * h * c));
     return img; 
