@@ -10,7 +10,11 @@
         FLA_Obj_create(FLA_DOUBLE, (_r), (_c), 0, 0, &(_var));\
         memcpy(FLA_Obj_buffer_at_view(_var), _var##_tmp, (_r) * (_c) * sizeof(double));\
     } while(0)
-
+#define FLA_OBJ_INIT_FROM_BUFFER(_var, _r, _c, _buf)\
+    do {\
+        FLA_Obj_create_without_buffer(FLA_DOUBLE, (_r), (_c), &(_var));\
+        FLA_Obj_attach_buffer((_buf), 1, (_r), &(_var));\
+    } while(0)
 #define FLA_OBJ_GET(_obj, _x, _y) (((double*) FLA_Obj_buffer_at_view(_obj))[(_x) + (_y) * (size_t) FLA_Obj_col_stride(_obj)])
 #define FLA_OBJ_W(_obj) ((size_t) FLA_Obj_width(_obj))
 #define FLA_OBJ_H(_obj) ((size_t) FLA_Obj_length(_obj))

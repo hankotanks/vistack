@@ -1,4 +1,4 @@
-#include "corners.h"
+#include "feats.h"
 #include "image.h"
 #include "plot.h"
 #include <stdlib.h>
@@ -18,13 +18,17 @@ int main(int argc, char* argv[]) {
     vi_ImageRaw temp = vi_ImageRaw_load(argv[1]);
     vi_ImageIntensity image = vi_ImageIntensity_from_ImageRaw(temp);
     free(temp);
-    const size_t* corners = vi_harris_corners_compute(image, HARRIS_THRESHOLD, HARRIS_NMS);
+    vi_HarrisCorners corners = vi_HarrisCorners_compute(image, HARRIS_THRESHOLD, HARRIS_NMS);
+    vi_ImageDescriptor desc = vi_ImageDescriptor_from_HarrisCorners(corners);
+    vi_ImageDescriptor_dump(desc);
     vi_Plot plot = vi_Plot_init();
     vi_Plot_add_layer(plot, vi_ImageIntensity_plotter(image));
-    vi_Plot_add_layer(plot, vi_harris_corners_plotter(image, corners));
+    vi_Plot_add_layer(plot, vi_HarrisCorners_plotter(corners));
+    vi_Plot_show(plot);
     vi_Plot_show(plot);
     vi_Plot_free(plot);
-    stbds_arrfree(corners);
+    vi_HarrisCorners_free(corners);
+    vi_ImageDescriptor_free(desc);
     free(image);
     return 0;
 }

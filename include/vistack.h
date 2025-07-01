@@ -3,7 +3,7 @@
 
 #include "plot.h"
 #include "image.h"
-#include "corners.h"
+#include "feats.h"
 
 
 #endif // __VISTACK_H__

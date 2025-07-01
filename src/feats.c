@@ -1,7 +1,8 @@
-#include "corners.h"
+#include "feats.h"
 #include <stddef.h>
 #include <stdbool.h>
 #include <float.h>
+#include <math.h>
 #define STB_DS_IMPLEMENTATION
 #include <stb_ds.h>
 #include <glenv.h>
@@ -11,6 +12,8 @@
 #include "image.h"
 #include "plot.h"
 
+#define MIN(a,b) (((a) < (b)) ? (a) : (b))
+#define MAX(a,b) (((a) > (b)) ? (a) : (b))
 
 size_t
 reflect(size_t x, size_t dx, size_t max) {
@@ -60,8 +63,14 @@ local_maxima_test(FLA_Obj r, size_t x, size_t y, size_t s) {
     return true;
 }
 
-const size_t*
-vi_harris_corners_compute(vi_ImageIntensity img, double t, size_t s) {
+vi_HarrisCorners
+vi_HarrisCorners_compute(vi_ImageIntensity img, double t, size_t s) {
+    vi_HarrisCorners corners = { .corners = NULL, .count = 0, 
+        .rows = vi_ImageIntensity_rows(img),
+        .cols = vi_ImageIntensity_cols(img) 
+    };
+
+    // initialize libflame environment
     FLA_Init();
     FLA_Obj mat = vi_ImageIntensity_to_Mat(img);
 
@@ -87,6 +96,14 @@ vi_harris_corners_compute(vi_ImageIntensity img, double t, size_t s) {
     FLA_Obj_free(&kx);
     FLA_Obj_free(&ky);
     FLA_Copy(jxx, jxy);
+    // copy gradients to vi_HarrisCorners
+    size_t buf_size = sizeof(double) * FLA_OBJ_W(jxx) * FLA_OBJ_H(jxx);
+    corners.jx = malloc(buf_size);
+    corners.jy = malloc(buf_size);
+    ASSERT_LOG(corners.jx != NULL && corners.jy != NULL, "Failed to allocate vi_HarrisCorners.");
+    memcpy(corners.jx, FLA_Obj_buffer_at_view(jxx), buf_size);
+    memcpy(corners.jy, FLA_Obj_buffer_at_view(jyy), buf_size);
+    // compute jxx, jxy, jyy from jx, jy
     FLA_Scal_elemwise(FLA_NO_TRANSPOSE, jyy, jxy);
     FLA_Scal_elemwise(FLA_NO_TRANSPOSE, jxx, jxx);
     FLA_Scal_elemwise(FLA_NO_TRANSPOSE, jyy, jyy);
@@ -135,22 +152,36 @@ vi_harris_corners_compute(vi_ImageIntensity img, double t, size_t s) {
         minima = (minima > v) ? v : minima;
         maxima = (maxima < v) ? v : maxima;
     }
-
-    size_t* corners = NULL;
     for(dy = 0; dy < FLA_OBJ_H(r); ++dy) for(dx = 0; dx < FLA_OBJ_W(r); ++dx) {
         v = FLA_OBJ_GET(r, dx, dy);
         v = (v - minima) / (maxima - minima);
         if(v > t && local_maxima_test(r, dx, dy, s)) {
-            stbds_arrput(corners, dx);
-            stbds_arrput(corners, dy);
+            stbds_arrput(corners.corners, dx);
+            stbds_arrput(corners.corners, dy);
+            ++(corners.count);
         }
     }
     FLA_Obj_free(&r);
-
+    // deinit libflame environment
     FLA_Finalize();
 
     return corners;
 }
+
+void
+vi_HarrisCorners_free(vi_HarrisCorners corners) {
+    free(corners.jx);
+    free(corners.jy);
+    stbds_arrfree(corners.corners);
+}
+
+//
+//
+//
+//
+//
+//
+//
 
 struct plotter_data {
     GLuint shader;
@@ -230,23 +261,116 @@ harris_corners_plotter_deinit(void* data) {
 }
 
 vi_Plotter
-vi_harris_corners_plotter(vi_ImageIntensity img, const size_t* corners) {
+vi_HarrisCorners_plotter(vi_HarrisCorners corners) {
     vi_Plotter layer = vi_Plotter_init(
         sizeof(struct plotter_data),
         harris_corners_plotter_config,
         harris_corners_plotter_render,
         harris_corners_plotter_deinit);
     struct plotter_data* plotter_data = ((struct plotter_data*) vi_Plotter_data(layer));
-    long corner_count = stbds_arrlen(corners);
-    ASSERT_LOG(corner_count >= 0, "Failed to construct vi_Plotter for Harris corners.");
-    plotter_data->corner_count = (size_t) corner_count;
+    plotter_data->corner_count = corners.count;
     plotter_data->corners = malloc(sizeof(float) * 2 * (size_t) plotter_data->corner_count);
     ASSERT_LOG(plotter_data->corners != NULL, "Failed to allocate space for vi_Plotter for Harris corners.");
     for (size_t i = 0; i < (size_t) plotter_data->corner_count; ++i) {
-        plotter_data->corners[i * 2] = 2.f * ((float) corners[i * 2] / \
-            (float) vi_ImageIntensity_cols(img)) - 1.f;
+        plotter_data->corners[i * 2] = 2.f * ((float) corners.corners[i * 2] / \
+            (float) corners.cols) - 1.f;
         plotter_data->corners[i * 2 + 1] = 1.f - 2.f * \
-            ((float) corners[i * 2 + 1] / (float) vi_ImageIntensity_rows(img));
+            ((float) corners.corners[i * 2 + 1] / (float) corners.rows);
     }
     return layer;
+}
+
+struct __FEATS_H__vi_ImageDescriptor {
+    size_t count;
+    unsigned char desc[];
+};
+
+void
+image_descriptor_patch(FLA_Obj ang, FLA_Obj mag, size_t x, size_t y, unsigned char* hist) {
+    (void) mag;
+    size_t i, j, k;
+    for(i = 0; i < 4; ++i) for(j = 0; j < 4; ++j) {
+        k = (size_t) (FLA_OBJ_GET(ang, x + i, y + j) / 45.0) % 8;
+        hist[k]++;
+    } 
+}
+
+vi_ImageDescriptor
+vi_ImageDescriptor_from_HarrisCorners(vi_HarrisCorners corners) {
+    vi_ImageDescriptor desc;
+    desc = calloc(1, sizeof(*desc) + corners.count * 128);
+    ASSERT_LOG(desc != NULL, "Failed to allocate vi_ImageDescriptor.");
+
+    // compute angle and magnitude
+    FLA_Init();
+    FLA_Obj jx, jy;
+    FLA_OBJ_INIT_FROM_BUFFER(jx, corners.rows, corners.cols, corners.jx);
+    FLA_OBJ_INIT_FROM_BUFFER(jy, corners.rows, corners.cols, corners.jy);
+    FLA_Obj ang, mag;
+    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, jx, &ang);
+    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, jx, &mag);
+    FLA_Copy(jx, mag);
+    FLA_Copy(jy, ang); // use ang as a temporary buffer for computing ang
+    FLA_Scal_elemwise(FLA_NO_TRANSPOSE, jx, mag);
+    FLA_Scal_elemwise(FLA_NO_TRANSPOSE, jy, ang);
+    // compute ang and final mag in tandem
+    size_t x, y, i, j, a, b;
+    for(x = 0; x < corners.cols; ++x) for(y = 0; y < corners.rows; ++y) {
+        FLA_OBJ_GET(mag, x, y) += FLA_OBJ_GET(ang, x, y);
+        // FLA_OBJ_GET(ang, x, y) = fabs(180.0 / M_PI * atan2(FLA_OBJ_GET(jy, x, y), FLA_OBJ_GET(jx, x, y)));
+        FLA_OBJ_GET(ang, x, y) = atan2(FLA_OBJ_GET(jy, x, y), FLA_OBJ_GET(jx, x, y));
+        FLA_OBJ_GET(ang, x, y) += (FLA_OBJ_GET(ang, x, y) < 0.0) ? M_PI * 2.0 : 0.0;
+        FLA_OBJ_GET(ang, x, y) *= 180.0 / M_PI;
+    }
+    
+    // build descriptors for each corner point
+    unsigned char* curr;
+    for(i = 0, j = 0; i < corners.count; ++i) {
+        x = corners.corners[i * 2];
+        y = corners.corners[i * 2 + 1];
+        if(x < 8 || y < 8 || (x + 8) >= corners.cols || (y + 8) >= corners.rows) continue;
+        curr = &(desc->desc[(j++) * 128]);
+        for(a = 0; a < 4; ++a) for(b = 0; b < 4; ++b) 
+            image_descriptor_patch(ang, mag, x + a * 4, y + b * 4, (curr += 8) - 8);
+        ++(desc->count);
+    }
+
+    // deinit libflame environment
+    FLA_Finalize();
+
+    return desc;
+}
+
+void
+vi_ImageDescriptor_free(vi_ImageDescriptor desc) {
+    free(desc);
+}
+
+void
+vi_ImageDescriptor_dump(vi_ImageDescriptor desc) {
+    for(size_t i = 0, j, k; i < desc->count; ++i) {
+        printf("[%zu] descriptor\n", i);
+        for(j = 0; j < 8; ++j) {
+            for(k = 0; k < 16; ++k) printf("%02d ", (int) desc->desc[i * 128 + j * 16 + k]);
+            printf("\n");
+        }
+        printf("\n");
+    }
+}
+
+struct __FEATS_H__vi_ImageMatches {
+    size_t count, matches[];
+};
+
+vi_ImageMatches
+vi_ImageMatches_compute(vi_ImageDescriptor a, vi_ImageDescriptor b) {
+    vi_ImageMatches matches;
+    matches = malloc(sizeof(*matches) + sizeof(size_t) * MIN(a->count, b->count) * 2);
+
+    return matches;
+}
+
+void
+vi_ImageMatches_free(vi_ImageMatches matches) {
+    free(matches);
 }
