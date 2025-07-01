@@ -81,15 +81,14 @@ vi_HarrisCorners_compute(vi_ImageIntensity img, double t, size_t s) {
         10.0, 0.0, -10.0,
          3.0, 0.0,  -3.0);
     FLA_OBJ_SCALE(kx, 1.0 / 32.0);
-    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, kx, &ky);
-    FLA_Copy(kx, ky);    
+    FLA_OBJ_DUPLICATE(kx, ky);
     FLA_Transpose(ky);
 
     // declare gradients
     FLA_Obj jxx, jxy, jyy;
-    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, mat, &jxx);
-    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, mat, &jyy);
-    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, mat, &jxy);
+    FLA_OBJ_LIKE(mat, jxx);
+    FLA_OBJ_LIKE(mat, jxy);
+    FLA_OBJ_LIKE(mat, jyy);
     convolve(mat, jxx, kx);
     convolve(mat, jyy, ky);
     FLA_Obj_free(&mat);
@@ -109,17 +108,13 @@ vi_HarrisCorners_compute(vi_ImageIntensity img, double t, size_t s) {
     FLA_Scal_elemwise(FLA_NO_TRANSPOSE, jyy, jyy);
     // declare M structure matrices
     FLA_Obj mxx, mxy, myy;
-    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, jxx, &mxx);
-    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, jxy, &mxy);  
-    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, jyy, &myy);
-    FLA_Set(FLA_ZERO, mxx);
-    FLA_Set(FLA_ZERO, mxy);
-    FLA_Set(FLA_ZERO, myy);
+    FLA_OBJ_LIKE(jxx, mxx);
+    FLA_OBJ_LIKE(jxy, mxy);
+    FLA_OBJ_LIKE(jyy, myy);
     
     // instantiate R matrix
     FLA_Obj r;
-    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, mxx, &r);
-    FLA_Copy(mxx, r);
+    FLA_OBJ_DUPLICATE(mxx, r);
 
     // calculate M values
     size_t dx, dy;
@@ -254,7 +249,7 @@ harris_corners_plotter_render(const void* data) {
 void
 harris_corners_plotter_deinit(void* data) {
     struct plotter_data* plotter_data = (struct plotter_data*) data;
-    stbds_arrfree(plotter_data->corners);
+    free(plotter_data->corners);
     glDeleteBuffers(1, &(plotter_data->VBO));
     glDeleteVertexArrays(1, &(plotter_data->VAO));
     glDeleteProgram(plotter_data->shader);
@@ -286,53 +281,91 @@ struct __FEATS_H__vi_ImageDescriptor {
 };
 
 void
-image_descriptor_patch(FLA_Obj ang, FLA_Obj mag, size_t x, size_t y, unsigned char* hist) {
-    (void) mag;
+desc_compute_patch(FLA_Obj ang, FLA_Obj mag, size_t x, size_t y, double* hist) {
     size_t i, j, k;
     for(i = 0; i < 4; ++i) for(j = 0; j < 4; ++j) {
         k = (size_t) (FLA_OBJ_GET(ang, x + i, y + j) / 45.0) % 8;
-        hist[k]++;
+        hist[k] += FLA_OBJ_GET(mag, x + i, y + j);
     } 
 }
 
+void
+desc_compute(FLA_Obj ang, FLA_Obj mag, size_t x, size_t y, double desc[128]) {
+    // does not perform bounds checking
+    for(size_t i = 0, j, k = 0; i < 4; ++i) for(j = 0; j < 4; ++j) 
+        desc_compute_patch(ang, mag, x + i * 4, y + j * 4, &(desc[(k += 8) - 8]));
+}
+
+void
+desc_quantize(double in[128], unsigned char out[128]) {
+    double norm = 0.0;
+    size_t i;
+    for(i = 0; i < 128; ++i) norm += in[i] * in[i];
+    norm = sqrt(norm);
+    if(norm > 1e-8) for(i = 0; i < 128; ++i) 
+        out[i] = (unsigned char) (in[i] / norm * 255.0 + 0.5);
+    else memset(out, 0, 128);
+}
+
 vi_ImageDescriptor
-vi_ImageDescriptor_from_HarrisCorners(vi_HarrisCorners corners) {
+vi_ImageDescriptor_from_HarrisCorners(vi_HarrisCorners in, vi_HarrisCorners* out) {
     vi_ImageDescriptor desc;
-    desc = calloc(1, sizeof(*desc) + corners.count * 128);
+    desc = calloc(1, sizeof(*desc) + in.count * 128);
     ASSERT_LOG(desc != NULL, "Failed to allocate vi_ImageDescriptor.");
 
     // compute angle and magnitude
     FLA_Init();
     FLA_Obj jx, jy;
-    FLA_OBJ_INIT_FROM_BUFFER(jx, corners.rows, corners.cols, corners.jx);
-    FLA_OBJ_INIT_FROM_BUFFER(jy, corners.rows, corners.cols, corners.jy);
+    FLA_OBJ_INIT_FROM_BUFFER(jx, in.rows, in.cols, in.jx);
+    FLA_OBJ_INIT_FROM_BUFFER(jy, in.rows, in.cols, in.jy);
     FLA_Obj ang, mag;
-    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, jx, &ang);
-    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, jx, &mag);
-    FLA_Copy(jx, mag);
-    FLA_Copy(jy, ang); // use ang as a temporary buffer for computing ang
+    FLA_OBJ_DUPLICATE(jx, ang);
+    FLA_OBJ_DUPLICATE(jy, mag);
     FLA_Scal_elemwise(FLA_NO_TRANSPOSE, jx, mag);
     FLA_Scal_elemwise(FLA_NO_TRANSPOSE, jy, ang);
     // compute ang and final mag in tandem
-    size_t x, y, i, j, a, b;
-    for(x = 0; x < corners.cols; ++x) for(y = 0; y < corners.rows; ++y) {
+    size_t x, y;
+    for(x = 0; x < in.cols; ++x) for(y = 0; y < in.rows; ++y) {
         FLA_OBJ_GET(mag, x, y) += FLA_OBJ_GET(ang, x, y);
-        // FLA_OBJ_GET(ang, x, y) = fabs(180.0 / M_PI * atan2(FLA_OBJ_GET(jy, x, y), FLA_OBJ_GET(jx, x, y)));
+        FLA_OBJ_GET(mag, x, y) = sqrt(FLA_OBJ_GET(mag, x, y));
         FLA_OBJ_GET(ang, x, y) = atan2(FLA_OBJ_GET(jy, x, y), FLA_OBJ_GET(jx, x, y));
         FLA_OBJ_GET(ang, x, y) += (FLA_OBJ_GET(ang, x, y) < 0.0) ? M_PI * 2.0 : 0.0;
         FLA_OBJ_GET(ang, x, y) *= 180.0 / M_PI;
     }
-    
+    FLA_Obj_free_without_buffer(&jx);
+    FLA_Obj_free_without_buffer(&jy);
+
+    size_t temp[in.count];
+    double curr[128];
+
     // build descriptors for each corner point
-    unsigned char* curr;
-    for(i = 0, j = 0; i < corners.count; ++i) {
-        x = corners.corners[i * 2];
-        y = corners.corners[i * 2 + 1];
-        if(x < 8 || y < 8 || (x + 8) >= corners.cols || (y + 8) >= corners.rows) continue;
-        curr = &(desc->desc[(j++) * 128]);
-        for(a = 0; a < 4; ++a) for(b = 0; b < 4; ++b) 
-            image_descriptor_patch(ang, mag, x + a * 4, y + b * 4, (curr += 8) - 8);
-        ++(desc->count);
+    size_t i;
+    for(i = 0; i < in.count; ++i) {
+        memset(curr, 0, sizeof(double) * 128);
+        x = in.corners[i * 2];
+        y = in.corners[i * 2 + 1];
+        if(x < 8 || y < 8 || (x + 8) >= in.cols || (y + 8) >= in.rows) continue;
+        temp[desc->count] = i;
+        desc_compute(ang, mag, x, y, curr);
+        desc_quantize(curr, &(desc->desc[((desc->count)++) * 128]));
+    }
+    FLA_Obj_free(&ang);
+    FLA_Obj_free(&mag);
+
+    // construct output corners
+    out->corners = NULL;
+    out->count = desc->count;
+    out->rows = in.rows;
+    out->cols = in.cols;
+    size_t buf = sizeof(double) * in.rows * in.cols;
+    out->jx = malloc(buf);
+    out->jy = malloc(buf);
+    ASSERT_LOG(out->jx != NULL && out->jy != NULL, "Failed to allocate vi_HarrisCorners.");
+    memcpy(in.jx, out->jx, buf);
+    memcpy(in.jy, out->jy, buf);
+    for(i = 0; i < desc->count; ++i) {
+        stbds_arrput(out->corners, in.corners[temp[i] * 2]);
+        stbds_arrput(out->corners, in.corners[temp[i] * 2 + 1]);
     }
 
     // deinit libflame environment
@@ -363,9 +396,34 @@ struct __FEATS_H__vi_ImageMatches {
 };
 
 vi_ImageMatches
-vi_ImageMatches_compute(vi_ImageDescriptor a, vi_ImageDescriptor b) {
+vi_ImageMatches_compute(vi_ImageDescriptor a, vi_ImageDescriptor b, double threshold) {
     vi_ImageMatches matches;
     matches = malloc(sizeof(*matches) + sizeof(size_t) * MIN(a->count, b->count) * 2);
+
+    double s, t, fst, snd;
+    for(size_t i = 0, j, k, m; i < a->count; ++i) {
+        fst = DBL_MAX;
+        snd = DBL_MAX;
+        for(j = 0; j < b->count; ++j) {
+            s = 0.0;
+            for(k = 0; k < 128; ++k) {
+                t = (double) a->desc[i * 128 + k] - (double) b->desc[j * 128 + k];
+                s += t * t;
+            }
+
+            if(s < fst) {
+                snd = fst;
+                fst = s;
+                m = j;
+            } else if(s < snd) snd = s;
+        }
+
+        if(s < threshold * threshold * snd) {
+            matches->matches[matches->count * 2] = i;
+            matches->matches[matches->count * 2 + 1] = m;
+            ++(matches->count);
+        }
+    }
 
     return matches;
 }
@@ -373,4 +431,15 @@ vi_ImageMatches_compute(vi_ImageDescriptor a, vi_ImageDescriptor b) {
 void
 vi_ImageMatches_free(vi_ImageMatches matches) {
     free(matches);
+}
+
+void
+vi_ImageMatches_dump(vi_ImageMatches matches, vi_HarrisCorners a,vi_HarrisCorners b) {
+    for(size_t i = 0, ax, ay, bx, by; i < matches->count; ++i) {
+        ax = a.corners[matches->matches[i * 2] * 2];
+        ay = a.corners[matches->matches[i * 2] * 2 + 1];
+        bx = b.corners[matches->matches[i * 2 + 1] * 2];
+        by = b.corners[matches->matches[i * 2 + 1] * 2 + 1];
+        printf("[%zu, %zu] <-> [%zu, %zu]\n", ax, ay, bx, by);
+    }
 }

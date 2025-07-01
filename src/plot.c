@@ -21,12 +21,6 @@ vi_Plotter_init(
     return layer;
 }
 
-void
-vi_Plotter_free(vi_Plotter layer) {
-    (layer->deinit)(layer->data);
-    free(layer);
-}
-
 void*
 vi_Plotter_data(vi_Plotter layer) {
     return layer->data;
@@ -48,8 +42,7 @@ void
 vi_Plot_free(vi_Plot plot) {
     long layer_count = stbds_arrlen(plot->layers);
     ASSERT_LOG(layer_count >= 0, "Failed to free vi_Plot.");
-    for(size_t i = 0; i < (size_t) layer_count; ++i) 
-        vi_Plotter_free(plot->layers[i]);
+    for(size_t i = 0; i < (size_t) layer_count; ++i) free(plot->layers[i]);
     stbds_arrfree(plot->layers);
     free(plot);
 }

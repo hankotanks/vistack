@@ -23,7 +23,7 @@ vi_HarrisCorners_free(vi_HarrisCorners corners);
 typedef struct __FEATS_H__vi_ImageDescriptor* vi_ImageDescriptor;
 
 vi_ImageDescriptor
-vi_ImageDescriptor_from_HarrisCorners(vi_HarrisCorners corners);
+vi_ImageDescriptor_from_HarrisCorners(vi_HarrisCorners in, vi_HarrisCorners* out);
 void
 vi_ImageDescriptor_free(vi_ImageDescriptor desc);
 void
@@ -32,8 +32,10 @@ vi_ImageDescriptor_dump(vi_ImageDescriptor desc);
 typedef struct __FEATS_H__vi_ImageMatches* vi_ImageMatches;
 
 vi_ImageMatches
-vi_ImageMatches_compute(vi_ImageDescriptor a, vi_ImageDescriptor b);
+vi_ImageMatches_compute(vi_ImageDescriptor a, vi_ImageDescriptor b, double t);
 void
 vi_ImageMatches_free(vi_ImageMatches matches);
+void
+vi_ImageMatches_dump(vi_ImageMatches matches, vi_HarrisCorners a, vi_HarrisCorners b);
 
 #endif // __FEATS_H__

@@ -33,7 +33,8 @@ vi_ImageRaw_load(const char* path) {
 
 vi_ImageIntensity 
 vi_ImageIntensity_from_ImageRaw(const vi_ImageRaw img) {
-    vi_ImageIntensity img_i = malloc(sizeof(struct __IMAGE_H__vi_ImageIntensity) + (size_t) (img->w * img->h) * sizeof(double));
+    vi_ImageIntensity img_i;
+    img_i = calloc(1, sizeof(*img_i) + (size_t) (img->w * img->h) * sizeof(double));
     ASSERT_LOG(img_i != NULL, "Failed to allocate memory for image intensity.");
     img_i->w = img->w;
     img_i->h = img->h;

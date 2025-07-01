@@ -20,8 +20,6 @@ vi_Plotter_init(size_t data_size,
     vi_Plotter_config config,
     vi_Plotter_render render, 
     vi_Plotter_deinit deinit);
-void
-vi_Plotter_free(vi_Plotter layer);
 void*
 vi_Plotter_data(vi_Plotter layer);
 

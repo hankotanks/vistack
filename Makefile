@@ -5,7 +5,7 @@ AR := ar
 
 EXAMPLES := flame_example image_test
 
-CFLAGS := -Wall -Wextra -Wconversion -Wpedantic -DLOGGING
+CFLAGS := -ggdb3 -Wall -Wextra -Wconversion -Wpedantic -DLOGGING
 
 #
 #

@@ -24,5 +24,13 @@
     FLA_Scal(_obj##_temp, _obj);\
     FLA_Obj_free(&(_obj##_temp));\
 }
+#define FLA_OBJ_LIKE(_src, _dst) {\
+    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, (_src), &(_dst));\
+    FLA_Set(FLA_ZERO, (_dst));\
+}
+#define FLA_OBJ_DUPLICATE(_src, _dst) {\
+    FLA_Obj_create_conf_to(FLA_NO_TRANSPOSE, (_src), &(_dst));\
+    memcpy(FLA_Obj_buffer_at_view((_dst)), FLA_Obj_buffer_at_view((_src)), sizeof(double) * FLA_OBJ_W((_dst)) * FLA_OBJ_H((_dst)));\
+}
 
 #endif // __FLA_H__
