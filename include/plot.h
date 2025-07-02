@@ -26,11 +26,11 @@ vi_Plotter_data(vi_Plotter layer);
 typedef struct __PLOT_H__vi_Plot* vi_Plot;
 
 vi_Plot
-vi_Plot_init();
+vi_Plot_init(const char* title, size_t rows, size_t cols);
 void
 vi_Plot_free(vi_Plot plot);
 void
-vi_Plot_add_layer(vi_Plot plot, vi_Plotter layer);
+vi_Plot_add_layer(vi_Plot plot, size_t x, size_t y, vi_Plotter layer);
 void
 vi_Plot_show(vi_Plot plot);
 

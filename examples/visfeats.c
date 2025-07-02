@@ -7,7 +7,7 @@
 #include <glenv.h>
 #include <vistack.h>
 
-#define HARRIS_THRESHOLD 0.5f
+#define HARRIS_THRESHOLD 0.3f
 #define HARRIS_NMS 5
 
 int main(int argc, char* argv[]) {
@@ -39,14 +39,11 @@ int main(int argc, char* argv[]) {
     
     // plot the images
     vi_Plot plot;
-    plot = vi_Plot_init();
-    vi_Plot_add_layer(plot, vi_ImageIntensity_plotter(image_a));
-    vi_Plot_add_layer(plot, vi_HarrisCorners_plotter(corners_a));
-    vi_Plot_show(plot);
-    vi_Plot_free(plot);
-    plot = vi_Plot_init();
-    vi_Plot_add_layer(plot, vi_ImageIntensity_plotter(image_b));
-    vi_Plot_add_layer(plot, vi_HarrisCorners_plotter(corners_b));
+    plot = vi_Plot_init("visfeats", 1, 2);
+    vi_Plot_add_layer(plot, 0, 0, vi_ImageIntensity_plotter(image_a));
+    vi_Plot_add_layer(plot, 0, 0, vi_HarrisCorners_plotter(corners_a));
+    vi_Plot_add_layer(plot, 1, 0, vi_ImageIntensity_plotter(image_b));
+    vi_Plot_add_layer(plot, 1, 0, vi_HarrisCorners_plotter(corners_b));
     vi_Plot_show(plot);
     vi_Plot_free(plot);
 
