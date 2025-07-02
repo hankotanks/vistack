@@ -3,23 +3,31 @@
 [source,sh]
 ----
 #!/bin/bash
-sudo apt-get install libflame-dev
+sudo apt-get install libblas-dev libflame-dev
 git clone https://github.com/hankotanks/vistack.git
 cd vistack
 make init
 ----
 
-=== Alternative (using internal `libflame`)
+=== With Internal Dependencies
 
 [source,sh]
 ----
 #!/bin/bash
-sudo apt-get install libblas-dev
 git clone https://github.com/hankotanks/vistack.git
 cd vistack
 git submodule update --init --recursive
-make init && make
+make init BUILD_FLAME=8
 ----
 
-To improve portability, BLAS is this project's only direct dependency. 
-Specify `EXT_FLAME=1` to prevent building `libflame` internally.
+If you're just checking out the examples,
+you can use the library directly without installing any dependencies.
+When running `make init`, set `BUILD_FLAME` to a non-zero integer
+(this number determines the number of cores used to build the dependencies).
+
+If you already have an optimized BLAS isntallation on your system,
+you can use it instead of the internal BLIS library:
+[source,sh]
+----
+make init BUILD_FLAME=8 BUILD_BLIS=0
+----
