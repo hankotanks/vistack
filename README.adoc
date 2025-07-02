@@ -23,7 +23,7 @@ make init BUILD_FLAME=8
 If you're just checking out the examples,
 you can use the library directly without installing any dependencies.
 When running `make init`, set `BUILD_FLAME` to a non-zero integer
-(this number determines the number of cores used to build the dependencies).
+(this determines the number of cores used in the build process).
 
 If you already have an optimized BLAS isntallation on your system,
 you can use it instead of the internal BLIS library:
