@@ -3,21 +3,22 @@
 [source,sh]
 ----
 #!/bin/bash
+sudo apt-get install libflame-dev
+git clone https://github.com/hankotanks/vistack.git
+cd vistack
+make init
+----
+
+=== Alternative (using internal `libflame`)
+
+[source,sh]
+----
+#!/bin/bash
 sudo apt-get install libblas-dev
 git clone https://github.com/hankotanks/vistack.git
 cd vistack
 git submodule update --init --recursive
 make init && make
-----
-
-.Alternative (if `libflame` is installed)
-[source,sh]
-----
-#!/bin/bash
-sudo apt-get install libflame-dev
-git clone https://github.com/hankotanks/vistack.git
-cd vistack
-make init EXT_FLAME=1 && make EXT_FLAME=1
 ----
 
 To improve portability, BLAS is this project's only direct dependency. 

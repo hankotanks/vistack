@@ -4,3 +4,4 @@ bin/
 ext/FLAME.h
 lib/
 build/
+logs/

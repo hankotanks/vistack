@@ -23,20 +23,24 @@ DIR_BIN := $(DIR)/bin
 DIR_EXT := $(DIR)/ext
 DIR_LIB := $(DIR)/lib
 DIR_LIB_FULL := $(DIR_LIB)/lib$(LIB).a
+DIR_LOG := $(DIR)/logs
 
 CFLAGS += -I$(DIR_INC) -isystem$(DIR_EXT)
 LDLIBS := -l$(LIB) -lflame -lblas -lm
 
 LDFLAGS := -L$(DIR)/lib
 
-EXT_FLAME ?= 0
-ifeq ($(EXT_FLAME), 0)
-	DIR_FLAME := $(DIR)/libflame
+WITH_INTERNAL_FLA ?= 0
+ifneq ($(WITH_INTERNAL_FLA), 0)
+	DIR_FLA := $(DIR)/libflame
 endif
 
 #
 #
 #
+
+.PHONY: init
+init: dir flame-init all
 
 .PHONY: all
 all: lib examples
@@ -56,9 +60,6 @@ $(patsubst $(DIR_SRC)/%.c, $(DIR_OBJ)/%.o, $(wildcard $(DIR_SRC)/*.c))
 $(DIR_OBJ)/%.o: $(DIR_SRC)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@ $(shell $(MAKE) get_obj_flags -s -C glenv) $(LDFLAGS) $(LDLIBS)
 
-.PHONY: init
-init: dir flame-init lib examples
-
 .PHONY: dir
 dir:
 	mkdir -p $(DIR_BIN) $(DIR_OBJ) $(DIR_LIB)
@@ -68,16 +69,16 @@ clean: flame-clean
 	$(RM) -r $(DIR_OBJ)/*.o
 
 .PHONY: flame flame-init flame-clean
-ifeq ($(EXT_FLAME), 0)
+ifneq ($(WITH_INTERNAL_FLA), 0)
 flame:
-	$(MAKE) -C $(DIR_FLAME)
-	$(MAKE) install -C $(DIR_FLAME)
-	$(RM) $(DIR_FLAME)/ar_obj_list
+	$(MAKE) -C $(DIR_FLA)
+	$(MAKE) install -C $(DIR_FLA)
+	$(RM) $(DIR_FLA)/ar_obj_list
 flame-init:
-	cd $(DIR_FLAME) && ./configure --disable-non-critical-code \
+	cd $(DIR_FLA) && ./configure --disable-non-critical-code \
 	--libdir=$(DIR_LIB) --includedir=$(DIR_EXT)
 flame-clean:
-	$(MAKE) clean -C $(DIR_FLAME)
+	$(MAKE) clean -C $(DIR_FLA)
 else
 flame:
 flame-init:

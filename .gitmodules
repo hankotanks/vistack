@@ -1,3 +1,7 @@
 [submodule "libflame"]
 	path = libflame
 	url = https://github.com/flame/libflame.git
+[submodule "blis"]
+	path = blis
+	url = https://github.com/flame/blis.git
+	branch = r2.0
