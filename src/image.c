@@ -6,6 +6,8 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 #include "log.h"
+#include <FLAME.h>
+#include "FLA.h"
 
 struct __IMAGE_H__vi_ImageRaw {
     size_t w, h, c; // width, height, channel count
@@ -64,20 +66,21 @@ vi_ImageIntensity_cols(vi_ImageIntensity img) {
 FLA_Obj
 vi_ImageIntensity_to_Mat(vi_ImageIntensity img) {
     FLA_Obj mat;
-    FLA_Obj_create(FLA_DOUBLE, img->h, img->w, 0, 0, &mat);
-    memcpy(FLA_Obj_buffer_at_view(mat), img->buf, img->w * img->h * sizeof(double));
+    FLA_Obj_create(FLA_DOUBLE, img->h, img->w, 1, img->h, &mat);
+    for(size_t x = 0; x < img->w; ++x) for(size_t y = 0; y < img->h; ++y)
+        FLA_OBJ_GET(mat, x, y) = img->buf[y * img->w + x];
     return mat;
 }
 
 vi_ImageIntensity
 vi_Mat_to_ImageIntensity(FLA_Obj mat) {
-    size_t rc, cc;
-    rc = (size_t) FLA_Obj_length(mat);
-    cc = (size_t) FLA_Obj_width(mat); 
-    vi_ImageIntensity img = malloc(sizeof(struct __IMAGE_H__vi_ImageIntensity) + sizeof(double) * rc * cc);
-    img->h = rc;
-    img->w = cc;
-    memcpy((double*) img->buf, FLA_Obj_buffer_at_view(mat), sizeof(double) * img->w * img->h);
+    vi_ImageIntensity img;
+    img = malloc(sizeof(*img) + sizeof(double) * FLA_OBJ_H(mat) * FLA_OBJ_W(mat));
+    img->h = FLA_OBJ_H(mat);
+    img->w = FLA_OBJ_W(mat);
+    for(size_t x = 0; x < img->w; ++x) for(size_t y = 0; y < img->h; ++y)
+        ((double*) img->buf)[x + y * FLA_OBJ_W(mat)] = FLA_OBJ_GET(mat, x, y);
+    // memcpy((double*) img->buf, FLA_Obj_buffer_at_view(mat), sizeof(double) * img->w * img->h);
     return img;
 }
 

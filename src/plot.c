@@ -69,7 +69,7 @@ plot_layer_viewport(RGFW_window* win, vi_Plot plot, size_t i) {
     y = (GLint) plot->pos[i * 2 + 1];
     w = (GLint) (win->r.w / (i32) plot->cols);
     h = (GLint) (win->r.h / (i32) plot->rows);
-    glViewport(x * w, y * h, (GLsizei) ((x + 1) * w), (GLsizei) ((y + 1) * h));
+    glViewport(x * w, y * h, (GLsizei) w, (GLsizei) h);
 }
 
 void
@@ -83,8 +83,11 @@ vi_Plot_show(vi_Plot plot) {
     // initialize render passes
     long layer_count = stbds_arrlen(plot->layers);
     ASSERT_LOG(layer_count >= 0, "Failed to show vi_Plot.");
-    for(size_t i = 0; i < (size_t) layer_count; ++i)
+    for(size_t i = 0; i < (size_t) layer_count; ++i) {
+        plot_layer_viewport(win, plot, i);
         (plot->layers[i]->config)((void*) plot->layers[i]->data);
+    }
+        
     // event loop
     while (!RGFW_window_shouldClose(win)) {
         glenv_new_frame();

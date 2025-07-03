@@ -15,26 +15,15 @@
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
 
-size_t
-reflect(size_t x, size_t dx, size_t max) {
-    // assume baked in -1 offset to dx
-    long long idx = (long long) x + (long long) dx - 1;
-    if(idx < 0) return (size_t) (-idx);
-    if (idx >= (long long) max) return max * 2 - x - 2;
-    return (size_t) idx;
-}
-
-void 
-convolve(FLA_Obj i, FLA_Obj j, FLA_Obj k) {
+void
+convolve(FLA_Obj in, FLA_Obj out, FLA_Obj kernel) {
     double sum;
-    size_t dx, dy, kx, ky, ix, iy;
-    for(dy = 0; dy < FLA_OBJ_H(i); ++dy) for(dx = 0; dx < FLA_OBJ_W(i); ++dx) {
-        for(ky = 0, sum = 0.0; ky < 3; ++ky) for(kx = 0; kx < 3; ++kx) {
-            ix = reflect(dx, kx, FLA_OBJ_W(i));
-            iy = reflect(dy, ky, FLA_OBJ_H(i));
-            sum += FLA_OBJ_GET(i, ix, iy) * FLA_OBJ_GET(k, kx, ky);
-        }
-        FLA_OBJ_GET(j, dx, dy) = sum;
+    size_t x, y, i, j;
+    for(y = 1; y < FLA_OBJ_H(in) - 1; ++y) for(x = 1; x < FLA_OBJ_W(in) - 1; ++x) {
+        sum = 0.0;
+        for(i = 0; i < 3; ++i) for(j = 0; j < 3; ++j) {
+            sum += FLA_OBJ_GET(in, x + j - 1, y + i - 1) * FLA_OBJ_GET(kernel, j, i);
+        } FLA_OBJ_GET(out, x, y) = sum;
     }
 }
 
@@ -42,7 +31,7 @@ double
 sum_kernel(FLA_Obj mat, size_t x, size_t y) {
     double sum = 0.0;
     for(size_t dy = y - 1, dx; dy <= y + 1; ++dy) for(dx = x - 1; dx <= x + 1; ++dx)
-        sum += FLA_OBJ_GET(mat, dx, dy);
+        sum += (x == dx && y == dy) ? 0.0 : FLA_OBJ_GET(mat, dx, dy);
     return sum;
 }
 
@@ -73,16 +62,26 @@ vi_HarrisCorners_compute(vi_ImageIntensity img, double t, size_t s) {
     // initialize libflame environment
     FLA_Init();
     FLA_Obj mat = vi_ImageIntensity_to_Mat(img);
+#if 0
+    QUICK_SHOW_MAT_AS_IMAGE(mat);
+#endif
 
     // instantiate kernel
     FLA_Obj kx, ky;
     FLA_OBJ_INIT(kx, 3, 3, 
-         3.0, 0.0,  -3.0,
-        10.0, 0.0, -10.0,
-         3.0, 0.0,  -3.0);
+          3.0, 0.0,  -3.0,
+         10.0, 0.0, -10.0,
+          3.0, 0.0,  -3.0);
     FLA_OBJ_SCALE(kx, 1.0 / 32.0);
-    FLA_OBJ_DUPLICATE(kx, ky);
-    FLA_Transpose(ky);
+    FLA_OBJ_INIT(ky, 3, 3, 
+         3.0,  10.0,  3.0,
+         0.0,   0.0,  0.0,
+        -3.0, -10.0, -3.0);
+    FLA_OBJ_SCALE(ky, 1.0 / 32.0);
+#if 0
+    FLA_Obj_show("kx", kx, "%.2f", "");
+    FLA_Obj_show("ky", ky, "%.2f", "");
+#endif
 
     // declare gradients
     FLA_Obj jxx, jxy, jyy;
@@ -91,6 +90,10 @@ vi_HarrisCorners_compute(vi_ImageIntensity img, double t, size_t s) {
     FLA_OBJ_LIKE(mat, jyy);
     convolve(mat, jxx, kx);
     convolve(mat, jyy, ky);
+#if 0
+    QUICK_SHOW_MAT_AS_IMAGE(jxx);
+    QUICK_SHOW_MAT_AS_IMAGE(jyy);
+#endif
     FLA_Obj_free(&mat);
     FLA_Obj_free(&kx);
     FLA_Obj_free(&ky);
@@ -120,12 +123,17 @@ vi_HarrisCorners_compute(vi_ImageIntensity img, double t, size_t s) {
     size_t dx, dy;
     for(dy = 1; dy < FLA_OBJ_H(mxx) - 1; ++dy) for(dx = 1; dx < FLA_OBJ_W(mxx) - 1; ++dx) {
         FLA_OBJ_GET(mxx, dx, dy) = sum_kernel(jxx, dx, dy);
-        FLA_OBJ_GET(myy, dx, dy) = sum_kernel(jyy, dx, dy);
         FLA_OBJ_GET(mxy, dx, dy) = sum_kernel(jxy, dx, dy);
+        FLA_OBJ_GET(myy, dx, dy) = sum_kernel(jyy, dx, dy);
     }
     FLA_Obj_free(&jxx);
     FLA_Obj_free(&jxy);
     FLA_Obj_free(&jyy);
+#if 0
+    QUICK_SHOW_MAT_AS_IMAGE(mxx);
+    QUICK_SHOW_MAT_AS_IMAGE(mxy);
+    QUICK_SHOW_MAT_AS_IMAGE(myy);
+#endif
 
     // calculate R values
     for(dy = 1; dy < FLA_OBJ_H(r) - 1; ++dy) for(dx = 1; dx < FLA_OBJ_W(r) - 1; ++dx) {
@@ -257,8 +265,7 @@ harris_corners_plotter_deinit(void* data) {
 
 vi_Plotter
 vi_HarrisCorners_plotter(vi_HarrisCorners corners) {
-    vi_Plotter layer = vi_Plotter_init(
-        sizeof(struct plotter_data),
+    vi_Plotter layer = vi_Plotter_init(sizeof(struct plotter_data),
         harris_corners_plotter_config,
         harris_corners_plotter_render,
         harris_corners_plotter_deinit);
@@ -418,7 +425,7 @@ vi_ImageMatches_compute(vi_ImageDescriptor a, vi_ImageDescriptor b, double thres
             } else if(s < snd) snd = s;
         }
 
-        if(s < threshold * threshold * snd) {
+        if(fst < threshold * threshold * snd) {
             matches->matches[matches->count * 2] = i;
             matches->matches[matches->count * 2 + 1] = m;
             ++(matches->count);

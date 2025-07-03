@@ -30,5 +30,15 @@ vi_Mat_to_ImageIntensity(FLA_Obj mat);
 vi_Plotter
 vi_ImageIntensity_plotter(vi_ImageIntensity img);
 
+#define QUICK_SHOW_MAT_AS_IMAGE(_mat) {\
+    vi_ImageIntensity _mat##_img_tmp = vi_Mat_to_ImageIntensity((_mat));\
+    vi_Plot _mat##_plot_tmp;\
+    _mat##_plot_tmp = vi_Plot_init("FLA_Obj Image View", 1, 1);\
+    vi_Plot_add_layer(_mat##_plot_tmp, 0, 0, vi_ImageIntensity_plotter(_mat##_img_tmp));\
+    vi_Plot_show(_mat##_plot_tmp);\
+    vi_Plot_free(_mat##_plot_tmp);\
+    free(_mat##_img_tmp);\
+}
+
 #endif // __IMAGE_H__
 

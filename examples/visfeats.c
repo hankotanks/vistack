@@ -7,7 +7,7 @@
 #include <glenv.h>
 #include <vistack.h>
 
-#define HARRIS_THRESHOLD 0.3f
+#define HARRIS_THRESHOLD 0.5f
 #define HARRIS_NMS 5
 
 int main(int argc, char* argv[]) {
@@ -33,7 +33,7 @@ int main(int argc, char* argv[]) {
     vi_ImageDescriptor desc_a, desc_b;
     desc_a = vi_ImageDescriptor_from_HarrisCorners(corners_temp, &corners_a);
     vi_HarrisCorners_free(corners_temp);
-    corners_temp = vi_HarrisCorners_compute(image_a, HARRIS_THRESHOLD, HARRIS_NMS);
+    corners_temp = vi_HarrisCorners_compute(image_b, HARRIS_THRESHOLD, HARRIS_NMS);
     desc_b = vi_ImageDescriptor_from_HarrisCorners(corners_temp, &corners_b);
     vi_HarrisCorners_free(corners_temp);
     
@@ -46,6 +46,11 @@ int main(int argc, char* argv[]) {
     vi_Plot_add_layer(plot, 1, 0, vi_HarrisCorners_plotter(corners_b));
     vi_Plot_show(plot);
     vi_Plot_free(plot);
+
+    // compute matches
+    vi_ImageMatches matches = vi_ImageMatches_compute(desc_a, desc_b, 0.5);
+    vi_ImageMatches_dump(matches, corners_a, corners_b);
+    vi_ImageMatches_free(matches);
 
     // clean up
     vi_HarrisCorners_free(corners_a);
