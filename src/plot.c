@@ -1,7 +1,8 @@
 #include "plot.h"
-#include <FLAME.h>
+
 #include <glenv.h>
 #include <stb_ds.h>
+
 #include "log.h"
 
 vi_Plotter

@@ -3,7 +3,12 @@
 
 #include "plot.h"
 #include "image.h"
-#include "feats.h"
+#include "mat.h"
+#include "feature.h"
 
+void
+vi_start();
+void 
+vi_finish();
 
 #endif // __VISTACK_H__

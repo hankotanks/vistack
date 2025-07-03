@@ -2,7 +2,8 @@
 #define __IMAGE_H__
 
 #include <stddef.h>
-#include <FLAME.h>
+
+#include "mat.h"
 #include "plot.h"
 
 typedef struct __IMAGE_H__vi_ImageRaw* vi_ImageRaw;
@@ -22,10 +23,10 @@ vi_ImageIntensity_cols(vi_ImageIntensity img);
 const double* 
 vi_ImageIntensity_buffer(vi_ImageIntensity img);
 
-FLA_Obj
+vi_Mat
 vi_ImageIntensity_to_Mat(vi_ImageIntensity img);
 vi_ImageIntensity
-vi_Mat_to_ImageIntensity(FLA_Obj mat);
+vi_Mat_to_ImageIntensity(vi_Mat mat);
 
 vi_Plotter
 vi_ImageIntensity_plotter(vi_ImageIntensity img);

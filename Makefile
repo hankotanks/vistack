@@ -3,7 +3,7 @@ LIB := vistack
 CC := gcc
 AR := ar
 
-EXAMPLES := fla_test visfeats
+EXAMPLES := test corners
 
 CFLAGS := -ggdb3 -Wall -Wextra -Wconversion -Wpedantic -DLOGGING
 
