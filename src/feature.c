@@ -101,7 +101,7 @@ suppress_non_maxima(vi_Mat r, size_t offset, size_t row, size_t col) {
 }
 
 vi_CornerList
-vi_CornerList_init(vi_ImageData data, vi_CornerDetector op, double t) {
+vi_CornerList_init(vi_ImageData data, vi_CornerDetector detector, double t) {
     // compute gradient compositions
     vi_Mat dxx = vi_Mat_init_copy(data.dx);
     vi_Mat dxy = vi_Mat_init_copy(data.dx);
@@ -132,7 +132,7 @@ vi_CornerList_init(vi_ImageData data, vi_CornerDetector op, double t) {
     vi_Mat_free(dyy);
     // calculate R values
     vi_Mat r = vi_Mat_init_zeros_like(data.image);
-    (op)(r, m);
+    (detector)(r, m);
     // free structure matrices
     vi_Mat_free(m[0]);
     vi_Mat_free(m[1]);
@@ -164,6 +164,10 @@ vi_CornerList_free(vi_CornerList corners) {
     stbds_arrfree(corners.rows);
     stbds_arrfree(corners.cols);
 }
+
+//
+//
+//
 
 struct plotter_data {
     GLuint shader;
@@ -316,6 +320,7 @@ bool desc_builder_sift_build(
     size_t col, 
     unsigned char buffer[]
 ) {
+    LOG(LOG_INFO, "%zu, %zu", row, col);
     const struct desc_builder_sift_data* builder_data = \
         (const struct desc_builder_sift_data*) data;
     // bounds checking
@@ -327,7 +332,7 @@ bool desc_builder_sift_build(
     memset(hist, 0, sizeof(double) * 128);
     for(size_t pr = 0, pc, pk = 0; pr < 4; ++pr) for(pc = 0; pc < 4; ++pc)
         desc_builder_sift_build_patch(builder_data, 
-            row + pr * 4, col + pc * 4, &hist[(pk += 8) - 8]);
+            row + pr * 4 - 8, col + pc * 4 - 8, &hist[(pk += 8) - 8]);
     size_t i;
     for(i = 0; i < 128; ++i) hist_norm += hist[i] * hist[i];
     hist_norm = sqrt(hist_norm);
@@ -365,6 +370,7 @@ vi_Desc_init(vi_ImageData data, vi_CornerList* corners, vi_DescBuilder builder) 
     vi_Desc desc;
     desc = calloc(1, sizeof(*desc) + (size_t) corner_count * builder.desc_size);
     ASSERT(desc != NULL);
+    desc->builder = builder;
     // initialize the builder data
     void* builder_data = malloc(builder.data_size);
     ASSERT(builder_data != NULL);
@@ -415,3 +421,78 @@ void
 vi_Desc_free(vi_Desc desc) {
     free(desc);
 }
+
+//
+//
+//
+
+double
+compute_match_dist_sq(unsigned char fst[], unsigned char snd[], size_t size) {
+    double norm = 0.0, temp;
+    for(size_t i = 0; i < size; ++i) {
+        temp = ((double) fst[i] - (double) snd[i]) / 255.0;
+        norm += temp * temp;
+    }
+    return norm;
+}
+
+vi_ImageMatches
+vi_ImageMatches_init(vi_Desc fst, vi_Desc snd, double t) {
+    size_t desc_size = fst->builder.desc_size;
+    ASSERT(desc_size == snd->builder.desc_size);
+    // initialize vi_ImageMatches
+    vi_ImageMatches matches = { .fst = NULL, .snd = NULL };
+    // compute matches
+    double s_fst, s_snd, s;
+    for(size_t i = 0, j, k; i < fst->count; ++i) {
+        s_fst = DBL_MAX;
+        s_snd = DBL_MAX;
+        for(j = 0; j < snd->count; ++j) {
+            s = compute_match_dist_sq(&(fst->buffer[i * desc_size]), 
+                &(snd->buffer[j * desc_size]), desc_size);
+            if(s < s_fst) {
+                k = j;
+                s_snd = s_fst;
+                s_fst = s;
+            } else if(s < s_snd) s_snd = s;
+        }
+        // lowe's criterion
+        if(s_fst < t * t * s_snd) {
+            stbds_arrput(matches.fst, i);
+            stbds_arrput(matches.snd, k);
+        }
+    }
+    return matches;
+}
+
+void
+vi_ImageMatches_show(vi_ImageMatches matches, vi_Desc fst, vi_Desc snd) {
+    long match_count = stbds_arrlen(matches.fst);
+    LOG(LOG_INFO, "%ld", match_count);
+    ASSERT(match_count >= 0 && match_count == stbds_arrlen(matches.snd));
+    unsigned char val;
+    for(size_t i = 0, j, k; i < (size_t) match_count; ++i) {
+        printf("[%zu] match\n", i);
+        printf(" a1  b1  c1  d1  e1  f1  g1  h1 ");
+        printf(" a2  b2  c2  d2  e2  f2  g2  h2\n");
+        for(j = 0; j < 16; ++j) {
+            for(k = 0; k < 8; ++k) {
+                val = fst->buffer[i * 128 + j * 16 + k];
+                if(val == 0) printf("    ");
+                else printf("%03d ", (int) val);
+            }
+            for(k = 0; k < 8; ++k) {
+                val = snd->buffer[i * 128 + j * 16 + k];
+                if(val == 0) printf("    ");
+                else printf("%03d ", (int) val);
+            } printf("\n");
+        } printf("\n");
+    }
+}
+
+void
+vi_ImageMatches_free(vi_ImageMatches matches) {
+    stbds_arrfree(matches.fst);
+    stbds_arrfree(matches.snd);
+}
+

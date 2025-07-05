@@ -36,7 +36,7 @@ vi_CornerDetector_ShiTomasi(vi_Mat r, vi_Mat m[static 3]);
 
 // functionality for handling vi_CornerList
 vi_CornerList
-vi_CornerList_init(vi_ImageData data, vi_CornerDetector op, double t);
+vi_CornerList_init(vi_ImageData data, vi_CornerDetector detector, double t);
 void
 vi_CornerList_free(vi_CornerList corners);
 vi_Plotter
@@ -64,5 +64,19 @@ void
 vi_Desc_show(vi_Desc desc);
 void
 vi_Desc_free(vi_Desc desc);
+
+// ImageMatches
+typedef struct {
+    size_t* fst;
+    size_t* snd;
+} vi_ImageMatches;
+
+// compute matches
+vi_ImageMatches
+vi_ImageMatches_init(vi_Desc fst, vi_Desc snd, double t);
+void
+vi_ImageMatches_show(vi_ImageMatches matches, vi_Desc fst, vi_Desc snd);
+void
+vi_ImageMatches_free(vi_ImageMatches matches);
 
 #endif // __FEATURE_H__
