@@ -30,7 +30,7 @@ vi_Plot_init(const char* title, size_t rows, size_t cols);
 void
 vi_Plot_free(vi_Plot plot);
 void
-vi_Plot_add_layer(vi_Plot plot, size_t x, size_t y, vi_Plotter layer);
+vi_Plot_add_layer(vi_Plot plot, size_t row, size_t col, size_t row_span, size_t col_span, vi_Plotter layer);
 void
 vi_Plot_show(vi_Plot plot);
 

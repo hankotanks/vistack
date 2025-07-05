@@ -29,8 +29,7 @@ vi_Plotter_data(vi_Plotter layer) {
 
 struct __PLOT_H__vi_Plot {
     const char* title;
-    size_t rows, cols;
-    size_t* pos;
+    size_t rows, cols,* pos;
     vi_Plotter* layers;
 };
 
@@ -57,25 +56,29 @@ vi_Plot_free(vi_Plot plot) {
 }
 
 void
-vi_Plot_add_layer(vi_Plot plot, size_t x, size_t y, vi_Plotter layer) {
-    stbds_arrput(plot->pos, x);
-    stbds_arrput(plot->pos, y);
+vi_Plot_add_layer(vi_Plot plot, size_t row, size_t col, size_t row_span, size_t col_span, vi_Plotter layer) {
+    stbds_arrput(plot->pos, row);
+    stbds_arrput(plot->pos, col);
+    stbds_arrput(plot->pos, row_span);
+    stbds_arrput(plot->pos, col_span);
     stbds_arrput(plot->layers, layer);
 }
 
 void
 plot_layer_viewport(RGFW_window* win, vi_Plot plot, size_t i) {
-    GLint x, y, w, h;
-    x = (GLint) plot->pos[i * 2];
-    y = (GLint) plot->pos[i * 2 + 1];
-    w = (GLint) (win->r.w / (i32) plot->cols);
-    h = (GLint) (win->r.h / (i32) plot->rows);
-    glViewport(x * w, y * h, (GLsizei) w, (GLsizei) h);
+    GLsizei w, h;
+    w = (GLsizei) (win->r.w / (i32) plot->cols);
+    h = (GLsizei) (win->r.h / (i32) plot->rows);
+    glViewport(
+        (GLint) plot->pos[i * 4 + 1] * w, 
+        (GLint) plot->pos[i * 4 + 0] * h, 
+        w * (GLsizei) plot->pos[i * 4 + 3], 
+        h * (GLsizei) plot->pos[i * 4 + 2]);
 }
 
 void
 vi_Plot_show(vi_Plot plot) {
-    ASSERT(stbds_arrlen(plot->pos) == stbds_arrlen(plot->layers) * 2);
+    ASSERT(stbds_arrlen(plot->pos) == stbds_arrlen(plot->layers) * 4);
     // windows initialization
     RGFW_window* win = RGFW_createWindow(plot->title, RGFW_RECT(0, 0, 800, 600), RGFW_windowCenter);
     glenv_init(win);

@@ -171,14 +171,15 @@ vi_CornerList_free(vi_CornerList corners) {
 
 struct plotter_data {
     GLuint shader;
-    size_t corner_count;
-    float* corners;
+    size_t count;
+    float* vertices;
     GLuint VAO, VBO, EBO;
 };
 
 void
 corners_plotter_config(void* data) {
-    struct plotter_data* plotter_data = (struct plotter_data*) data;
+    struct plotter_data* plotter_data = \
+        (struct plotter_data*) data;
     // shaders
     const char* vert_src =
         "#version 330 core\n"
@@ -221,26 +222,28 @@ corners_plotter_config(void* data) {
     glBindVertexArray(plotter_data->VAO);
     glBindBuffer(GL_ARRAY_BUFFER, plotter_data->VBO);
     glBufferData(GL_ARRAY_BUFFER, 
-        (GLsizeiptr) (sizeof(float) * plotter_data->corner_count * 2), 
-        plotter_data->corners, GL_STATIC_DRAW);
+        (GLsizeiptr) (sizeof(float) * plotter_data->count * 2), 
+        plotter_data->vertices, GL_STATIC_DRAW);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
     glEnableVertexAttribArray(0);
 }
 
 void
 corners_plotter_render(const void* data) {
-    const struct plotter_data* plotter_data = (const struct plotter_data*) data;
+    const struct plotter_data* plotter_data = \
+        (const struct plotter_data*) data;
     glEnable(GL_PROGRAM_POINT_SIZE);
     glUseProgram(plotter_data->shader);
     glBindVertexArray(plotter_data->VAO);
-    glDrawArrays(GL_POINTS, 0, (GLsizei) plotter_data->corner_count);
+    glDrawArrays(GL_POINTS, 0, (GLsizei) plotter_data->count);
     glDisable(GL_PROGRAM_POINT_SIZE);
 }
 
 void
 corners_plotter_deinit(void* data) {
-    struct plotter_data* plotter_data = (struct plotter_data*) data;
-    free(plotter_data->corners);
+    struct plotter_data* plotter_data = \
+        (struct plotter_data*) data;
+    free(plotter_data->vertices);
     glDeleteBuffers(1, &(plotter_data->VBO));
     glDeleteVertexArrays(1, &(plotter_data->VAO));
     glDeleteProgram(plotter_data->shader);
@@ -255,13 +258,14 @@ vi_CornerList_plot(vi_ImageData data, vi_CornerList corners) {
         corners_plotter_render,
         corners_plotter_deinit);
     struct plotter_data* plotter_data = ((struct plotter_data*) vi_Plotter_data(layer));
-    plotter_data->corner_count = (size_t) corner_count;
-    plotter_data->corners = malloc(sizeof(float) * 2 * (size_t) plotter_data->corner_count);
-    ASSERT(plotter_data->corners != NULL);
-    for(size_t i = 0; i < plotter_data->corner_count; ++i) {
-        plotter_data->corners[i * 2] = 2.f * ((float) corners.cols[i] / \
+    plotter_data->count = (size_t) corner_count;
+    plotter_data->vertices = malloc(sizeof(float) * 2 * \
+        (size_t) plotter_data->count);
+    ASSERT(plotter_data->vertices != NULL);
+    for(size_t i = 0; i < plotter_data->count; ++i) {
+        plotter_data->vertices[i * 2] = 2.f * ((float) corners.cols[i] / \
             (float) vi_Mat_cols(data.image)) - 1.f;
-        plotter_data->corners[i * 2 + 1] = 1.f - 2.f * \
+        plotter_data->vertices[i * 2 + 1] = 1.f - 2.f * \
             ((float) corners.rows[i] / (float) vi_Mat_rows(data.image));
     }
     return layer;
@@ -320,7 +324,6 @@ bool desc_builder_sift_build(
     size_t col, 
     unsigned char buffer[]
 ) {
-    LOG(LOG_INFO, "%zu, %zu", row, col);
     const struct desc_builder_sift_data* builder_data = \
         (const struct desc_builder_sift_data*) data;
     // bounds checking
@@ -437,19 +440,19 @@ compute_match_dist_sq(unsigned char fst[], unsigned char snd[], size_t size) {
 }
 
 vi_ImageMatches
-vi_ImageMatches_init(vi_Desc fst, vi_Desc snd, double t) {
-    size_t desc_size = fst->builder.desc_size;
-    ASSERT(desc_size == snd->builder.desc_size);
+vi_ImageMatches_init(vi_Desc desc[static 2], double t) {
+    size_t desc_size = desc[0]->builder.desc_size;
+    ASSERT(desc_size == desc[1]->builder.desc_size);
     // initialize vi_ImageMatches
     vi_ImageMatches matches = { .fst = NULL, .snd = NULL };
     // compute matches
     double s_fst, s_snd, s;
-    for(size_t i = 0, j, k; i < fst->count; ++i) {
+    for(size_t i = 0, j, k; i < desc[0]->count; ++i) {
         s_fst = DBL_MAX;
         s_snd = DBL_MAX;
-        for(j = 0; j < snd->count; ++j) {
-            s = compute_match_dist_sq(&(fst->buffer[i * desc_size]), 
-                &(snd->buffer[j * desc_size]), desc_size);
+        for(j = 0; j < desc[1]->count; ++j) {
+            s = compute_match_dist_sq(&(desc[0]->buffer[i * desc_size]), 
+                &(desc[1]->buffer[j * desc_size]), desc_size);
             if(s < s_fst) {
                 k = j;
                 s_snd = s_fst;
@@ -496,3 +499,102 @@ vi_ImageMatches_free(vi_ImageMatches matches) {
     stbds_arrfree(matches.snd);
 }
 
+//
+//
+//
+
+void
+matches_plotter_config(void* data) {
+    struct plotter_data* plotter_data = \
+        (struct plotter_data*) data;
+    // shaders
+    const char* vert_src =
+        "#version 330 core\n"
+        "layout(location = 0) in vec2 aPos;\n"
+        "void main() {\n"
+        "    gl_Position = vec4(aPos, 0.0, 1.0);\n"
+        "}\n";
+    const char* frag_src =
+        "#version 330 core\n"
+        "out vec4 FragColor;\n"
+        "void main() {\n"
+        "    FragColor = vec4(1.0, 0.0, 0.0, 1.0);\n"
+        "}\n";
+    // vertex shader
+    GLuint vert = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vert, 1, &vert_src, NULL);
+    glCompileShader(vert);
+    GLint success;
+    glGetShaderiv(vert, GL_COMPILE_STATUS, &success);
+    ASSERT_LOG(success == GL_TRUE, "Failed to compile pts vertex shader.");
+    // fragment shader
+    GLuint frag = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(frag, 1, &frag_src, NULL);
+    glCompileShader(frag);
+    glGetShaderiv(frag, GL_COMPILE_STATUS, &success);
+    ASSERT_LOG(success == GL_TRUE, "Failed to compile pts fragment shader.");
+    // create shader program and link
+    plotter_data->shader = glCreateProgram();
+    glAttachShader(plotter_data->shader, vert);
+    glAttachShader(plotter_data->shader, frag);
+    glLinkProgram(plotter_data->shader);
+    glGetProgramiv(plotter_data->shader, GL_LINK_STATUS, &success);
+    ASSERT_LOG(success == GL_TRUE, "Failed to link pts shader program.");
+    glDeleteShader(vert);
+    glDeleteShader(frag);
+    // buffers
+    glGenVertexArrays(1, &(plotter_data->VAO));
+    glGenBuffers(1, &(plotter_data->VBO));
+    glBindVertexArray(plotter_data->VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, plotter_data->VBO);
+    glBufferData(GL_ARRAY_BUFFER, 
+        (GLsizeiptr) (sizeof(float) * plotter_data->count * 4), 
+        plotter_data->vertices, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+    glEnableVertexAttribArray(0);
+}
+
+void
+matches_plotter_render(const void* data) {
+    const struct plotter_data* plotter_data = \
+        (const struct plotter_data*) data;
+    glUseProgram(plotter_data->shader);
+    glBindVertexArray(plotter_data->VAO);
+    glDrawArrays(GL_LINES, 0, (GLsizei) plotter_data->count * 2);
+}
+
+void
+matches_plotter_deinit(void* data) {
+    struct plotter_data* plotter_data = \
+        (struct plotter_data*) data;
+    free(plotter_data->vertices);
+    glDeleteBuffers(1, &(plotter_data->VBO));
+    glDeleteVertexArrays(1, &(plotter_data->VAO));
+    glDeleteProgram(plotter_data->shader);
+}
+
+vi_Plotter
+vi_ImageMatches_plot(vi_ImageMatches matches, vi_ImageData data[static 2], vi_CornerList corners[static 2]) {
+    vi_Plotter layer = vi_Plotter_init(sizeof(struct plotter_data),
+        matches_plotter_config,
+        matches_plotter_render,
+        matches_plotter_deinit);
+    struct plotter_data* plotter_data = ((struct plotter_data*) vi_Plotter_data(layer));
+    long match_count = stbds_arrlen(matches.fst);
+    ASSERT(match_count >= 0 && match_count == stbds_arrlen(matches.snd));
+    plotter_data->count = (size_t) match_count;
+    plotter_data->vertices = malloc(sizeof(float) * 4 * (size_t) match_count);
+    ASSERT(plotter_data->vertices != NULL);
+    for(size_t i = 0, x, y; i < plotter_data->count; ++i) {
+        x = corners[0].cols[i];
+        y = corners[0].rows[i];
+        plotter_data->vertices[i * 4 + 0] = (float) x / (float) vi_Mat_cols(data[0].image) - 1.f;
+        plotter_data->vertices[i * 4 + 1] = 1.f - 2.f * (float) y / (float) vi_Mat_rows(data[0].image);
+        x = corners[1].cols[i];
+        y = corners[1].rows[i];
+        plotter_data->vertices[i * 4 + 2] = (float) x / (float) vi_Mat_cols(data[1].image);
+        plotter_data->vertices[i * 4 + 3] = 1.f - 2.f * (float) y / (float) vi_Mat_rows(data[1].image);
+    }
+    
+    return layer;
+}

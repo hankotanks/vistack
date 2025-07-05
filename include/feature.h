@@ -73,10 +73,12 @@ typedef struct {
 
 // compute matches
 vi_ImageMatches
-vi_ImageMatches_init(vi_Desc fst, vi_Desc snd, double t);
+vi_ImageMatches_init(vi_Desc desc[static 2], double t);
 void
 vi_ImageMatches_show(vi_ImageMatches matches, vi_Desc fst, vi_Desc snd);
 void
 vi_ImageMatches_free(vi_ImageMatches matches);
+vi_Plotter
+vi_ImageMatches_plot(vi_ImageMatches matches, vi_ImageData data[static 2], vi_CornerList corners[static 2]);
 
 #endif // __FEATURE_H__

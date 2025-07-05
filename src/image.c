@@ -80,7 +80,7 @@ vi_Mat_to_ImageIntensity(vi_Mat mat) {
     return image;
 }
 
-struct plotter_data {
+struct corners_plotter_data {
     GLuint shader;
     vi_ImageIntensity image;
     GLuint tex;
@@ -90,7 +90,7 @@ struct plotter_data {
 void
 image_intensity_plotter_config(void* data) {
     // get pointer to the data
-    struct plotter_data* plotter_data = (struct plotter_data*) data;
+    struct corners_plotter_data* plotter_data = (struct corners_plotter_data*) data;
     // fragment and vertex shader sources
     const char* vert_src =
         "#version 330 core\n"
@@ -171,7 +171,7 @@ image_intensity_plotter_config(void* data) {
 
 void
 image_intensity_plotter_render(const void* data) {
-    const struct plotter_data* plotter_data = (const struct plotter_data*) data;
+    const struct corners_plotter_data* plotter_data = (const struct corners_plotter_data*) data;
     glUseProgram(plotter_data->shader);
     glBindVertexArray(plotter_data->VAO);
     glBindTexture(GL_TEXTURE_2D, plotter_data->tex);
@@ -180,7 +180,7 @@ image_intensity_plotter_render(const void* data) {
 
 void
 image_intensity_plotter_deinit(void* data) {
-    struct plotter_data* plotter_data = (struct plotter_data*) data;
+    struct corners_plotter_data* plotter_data = (struct corners_plotter_data*) data;
     glDeleteTextures(1, &(plotter_data->tex));
     glDeleteBuffers(1, &(plotter_data->VBO));
     glDeleteBuffers(1, &(plotter_data->EBO));
@@ -191,10 +191,10 @@ image_intensity_plotter_deinit(void* data) {
 vi_Plotter
 vi_ImageIntensity_plotter(vi_ImageIntensity image) {
     vi_Plotter layer = vi_Plotter_init(
-        sizeof(struct plotter_data),
+        sizeof(struct corners_plotter_data),
         image_intensity_plotter_config,
         image_intensity_plotter_render,
         image_intensity_plotter_deinit);
-    ((struct plotter_data*) vi_Plotter_data(layer))->image = image;
+    ((struct corners_plotter_data*) vi_Plotter_data(layer))->image = image;
     return layer;
 }
