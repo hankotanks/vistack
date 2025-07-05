@@ -397,7 +397,8 @@ vi_Desc_show(vi_Desc desc) {
     unsigned char val;
     for(size_t i = 0, j, k; i < desc->count; ++i) {
         printf("[%zu] descriptor\n", i);
-        printf(" a  b  c  d  e  f  g  h  i  j  k  l  m  n  o  p\n");
+        printf("  a   b   c   d   e   f   g   h");
+        printf("   i   j   k   l   m   n   o   p\n");
         for(k = 0; k < 8; ++k) {
             for(j = 0; j < 16; ++j) {
                 val = desc->buffer[i * 128 + j * 16 + k];
