@@ -12,7 +12,7 @@ typedef struct {
     void (*render)(const void* data);
     void (*deinit)(void* data);
     size_t data_size;
-    char data[];
+    unsigned char data[];
 }* vi_Plotter;
 
 vi_Plotter

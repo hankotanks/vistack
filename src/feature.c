@@ -2,6 +2,7 @@
 
 #include <float.h>
 #include <glenv.h>
+#include <math.h>
 #include <stdbool.h>
 #define STB_DS_IMPLEMENTATION
 #include <stb_ds.h>
@@ -46,9 +47,7 @@ vi_ImageData_init(vi_ImageIntensity image, vi_Mat kernel) {
     };
     // create image gradients
     data.dx = convolve(data.image, kernel, data.offset);
-    vi_Mat_show(kernel, "kx");
     vi_Mat_transpose_square(kernel);
-    vi_Mat_show(kernel, "ky");
     data.dy = convolve(data.image, kernel, data.offset);
     vi_Mat_transpose_square(kernel);
     return data;
@@ -61,7 +60,11 @@ vi_ImageData_free(vi_ImageData data) {
     vi_Mat_free(data.dy);
 }
 
-void vi_HarrisDetector(vi_Mat r, vi_Mat m[static 3]) {
+//
+//
+//
+
+void vi_CornerDetector_Harris(vi_Mat r, vi_Mat m[static 3]) {
     double mxx, mxy, myy;
     vi_Mat_it(r) {
         mxx = vi_Mat_get(m[0], it_row, it_col);
@@ -144,13 +147,13 @@ vi_CornerList_init(vi_ImageData data, vi_CornerDetector op, double t) {
         }
     }
     // assemble corners list
-    vi_CornerList corners = { .x = NULL, .y = NULL };
+    vi_CornerList corners = { .rows = NULL, .cols = NULL };
     {
         vi_Mat_it(r) {
             if((*it_val - minima) / (maxima - minima) < t) continue;
             if(suppress_non_maxima(r, data.offset, it_row, it_col)) continue;
-            stbds_arrput(corners.x, it_col);
-            stbds_arrput(corners.y, it_row);
+            stbds_arrput(corners.rows, it_row);
+            stbds_arrput(corners.cols, it_col);
         }
     }
     return corners;
@@ -158,10 +161,9 @@ vi_CornerList_init(vi_ImageData data, vi_CornerDetector op, double t) {
 
 void
 vi_CornerList_free(vi_CornerList corners) {
-    stbds_arrfree(corners.x);
-    stbds_arrfree(corners.y);
+    stbds_arrfree(corners.rows);
+    stbds_arrfree(corners.cols);
 }
-
 
 struct plotter_data {
     GLuint shader;
@@ -179,13 +181,13 @@ corners_plotter_config(void* data) {
         "layout(location = 0) in vec2 aPos;\n"
         "void main() {\n"
         "    gl_Position = vec4(aPos, 0.0, 1.0);\n"
-        "    gl_PointSize = 5.0;\n"  // adjust point size as needed
+        "    gl_PointSize = 5.0;\n"
         "}\n";
     const char* frag_src =
         "#version 330 core\n"
         "out vec4 FragColor;\n"
         "void main() {\n"
-        "    FragColor = vec4(1.0, 0.0, 0.0, 1.0); // red points\n"
+        "    FragColor = vec4(1.0, 0.0, 0.0, 1.0);\n"
         "}\n";
     // vertex shader
     GLuint vert = glCreateShader(GL_VERTEX_SHADER);
@@ -242,8 +244,8 @@ corners_plotter_deinit(void* data) {
 
 vi_Plotter
 vi_CornerList_plot(vi_ImageData data, vi_CornerList corners) {
-    long corner_count = stbds_arrlen(corners.x);
-    ASSERT(corner_count >= 0 && corner_count == stbds_arrlen(corners.y));
+    long corner_count = stbds_arrlen(corners.rows);
+    ASSERT(corner_count >= 0 && corner_count == stbds_arrlen(corners.cols));
     vi_Plotter layer = vi_Plotter_init(sizeof(struct plotter_data),
         corners_plotter_config,
         corners_plotter_render,
@@ -253,10 +255,162 @@ vi_CornerList_plot(vi_ImageData data, vi_CornerList corners) {
     plotter_data->corners = malloc(sizeof(float) * 2 * (size_t) plotter_data->corner_count);
     ASSERT(plotter_data->corners != NULL);
     for(size_t i = 0; i < plotter_data->corner_count; ++i) {
-        plotter_data->corners[i * 2] = 2.f * ((float) corners.x[i] / \
+        plotter_data->corners[i * 2] = 2.f * ((float) corners.cols[i] / \
             (float) vi_Mat_cols(data.image)) - 1.f;
         plotter_data->corners[i * 2 + 1] = 1.f - 2.f * \
-            ((float) corners.y[i] / (float) vi_Mat_rows(data.image));
+            ((float) corners.rows[i] / (float) vi_Mat_rows(data.image));
     }
     return layer;
+}
+
+//
+//
+//
+
+struct desc_builder_sift_data {
+    vi_Mat ang;
+    vi_Mat mag;
+};
+
+void desc_builder_sift_setup(vi_ImageData image_data, void* data) {
+    struct desc_builder_sift_data* builder_data = \
+        (struct desc_builder_sift_data*) data;
+    builder_data->ang = vi_Mat_init_copy(image_data.dx);
+    builder_data->mag = vi_Mat_init_copy(image_data.dy);
+    vi_Mat_scale_elem_wise(builder_data->ang, image_data.dx);
+    vi_Mat_scale_elem_wise(builder_data->mag, image_data.dy);
+    {
+        vi_Mat_it(builder_data->mag) {
+            *it_val += vi_Mat_get(builder_data->ang, it_row, it_col);
+            *it_val = sqrt(*it_val);
+        }
+    }
+    {
+        double x, y;
+        vi_Mat_it(builder_data->ang) {
+            x = vi_Mat_get(image_data.dx, it_row, it_col);
+            y = vi_Mat_get(image_data.dy, it_row, it_col);
+            *it_val = atan2(y, x);
+            *it_val += (*it_val < 0.0) ? M_PI * 2.0 : 0.0;
+            *it_val *= 180.0 / M_PI;
+        }
+    }
+}
+
+void desc_builder_sift_build_patch(
+    const struct desc_builder_sift_data* builder_data, 
+    size_t row, 
+    size_t col, 
+    double hist[]
+) {
+    size_t idx;
+    for(size_t dr = 0, dc; dr < 4; ++dr) for(dc = 0; dc < 4; ++dc) {
+        idx = (size_t) (vi_Mat_get(builder_data->ang, row + dr, col + dc) / 45.0) % 8;
+        hist[idx] += vi_Mat_get(builder_data->mag, row + dr, col + dc);
+    }
+}
+
+bool desc_builder_sift_build(
+    const void* data, 
+    size_t row, 
+    size_t col, 
+    unsigned char buffer[]
+) {
+    const struct desc_builder_sift_data* builder_data = \
+        (const struct desc_builder_sift_data*) data;
+    // bounds checking
+    size_t rc, cc;
+    rc = vi_Mat_rows(builder_data->ang);
+    cc = vi_Mat_rows(builder_data->mag);
+    if(row < 8 || col < 8 || (row + 8) >= rc || (col + 8) >= cc) return false;
+    double hist[128], hist_norm = 0.0;
+    memset(hist, 0, sizeof(double) * 128);
+    for(size_t pr = 0, pc, pk = 0; pr < 4; ++pr) for(pc = 0; pc < 4; ++pc)
+        desc_builder_sift_build_patch(builder_data, 
+            row + pr * 4, col + pc * 4, &hist[(pk += 8) - 8]);
+    size_t i;
+    for(i = 0; i < 128; ++i) hist_norm += hist[i] * hist[i];
+    hist_norm = sqrt(hist_norm);
+    if(hist_norm > 1e-8) for(i = 0; i < 128; ++i)
+        buffer[i] = (unsigned char) (hist[i] / hist_norm * 255.0 + 0.5);
+    else memset(buffer, 0, 128);
+    return true;
+}
+
+vi_DescBuilder
+__FEATURE_H__vi_DescBuilder_SIFT() {
+    return (vi_DescBuilder) { 
+        .desc_size = 128, 
+        .data_size = sizeof(struct desc_builder_sift_data),
+        .setup = desc_builder_sift_setup,
+        .build = desc_builder_sift_build
+    };
+}
+
+//
+//
+//
+
+struct __FEATURE_H__vi_Desc {
+    vi_DescBuilder builder;
+    size_t count;
+    unsigned char buffer[];
+};
+
+vi_Desc
+vi_Desc_init(vi_ImageData data, vi_CornerList* corners, vi_DescBuilder builder) {
+    long corner_count = stbds_arrlen(corners->rows);
+    ASSERT(corner_count >= 0 && corner_count == stbds_arrlen(corners->cols));
+    // allocate descriptor list
+    vi_Desc desc;
+    desc = calloc(1, sizeof(*desc) + (size_t) corner_count * builder.desc_size);
+    ASSERT(desc != NULL);
+    // initialize the builder data
+    void* builder_data = malloc(builder.data_size);
+    ASSERT(builder_data != NULL);
+    (builder.setup)(data, builder_data);
+    // compute features
+    bool corner_mask[(size_t) corner_count];
+    for(size_t i = 0, row, col; i < (size_t) corner_count; ++i) {
+        row = corners->rows[i];
+        col = corners->cols[i];
+        corner_mask[i] = (builder.build)(builder_data, row, col, 
+            &(desc->buffer[desc->count * builder.desc_size]));
+        if(corner_mask[i]) ++(desc->count);
+    }
+    // update corners to reflect discarded feature candidates
+    size_t* rows = NULL;
+    size_t* cols = NULL;
+    for(size_t i = 0; i < (size_t) corner_count; ++i) if(corner_mask[i]) {
+        stbds_arrput(rows, corners->rows[i]);
+        stbds_arrput(cols, corners->cols[i]);
+    }
+    vi_CornerList_free(*corners);
+    corners->rows = rows;
+    corners->cols = cols;
+    // return feature descriptors
+    return desc;
+}
+
+void
+vi_Desc_show(vi_Desc desc) {
+    unsigned char val;
+    for(size_t i = 0, j, k; i < desc->count; ++i) {
+        printf("[%zu] descriptor\n", i);
+        printf(" a  b  c  d  e  f  g  h  i  j  k  l  m  n  o  p\n");
+        for(k = 0; k < 8; ++k) {
+            for(j = 0; j < 16; ++j) {
+                val = desc->buffer[i * 128 + j * 16 + k];
+                if(val == 0) printf("    ");
+                else printf("%03d ", (int) val);
+            }
+            printf("\n");
+        }
+        printf("\n");
+    }
+}
+
+void
+vi_Desc_free(vi_Desc desc) {
+    free(desc);
 }

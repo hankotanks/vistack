@@ -24,65 +24,65 @@ vi_ImageRaw_load(const char* path) {
     int w, h, c;
     unsigned char* buf = stbi_load(path, &w, &h, &c, 0);
     ASSERT_LOG(buf != NULL, "Failed to open image [%s].", path);
-    vi_ImageRaw img = malloc(sizeof(struct __IMAGE_H__vi_ImageRaw) + (size_t) (w * h * c));
-    ASSERT_LOG(img != NULL, "Failed to allocate memory for image [%s],", path);
-    img->w = (size_t) w;
-    img->h = (size_t) h;
-    img->c = (size_t) c;
-    memcpy((unsigned char*) img->buf, buf, (size_t) (w * h * c));
-    return img; 
+    vi_ImageRaw image = malloc(sizeof(struct __IMAGE_H__vi_ImageRaw) + (size_t) (w * h * c));
+    ASSERT_LOG(image != NULL, "Failed to allocate memory for image [%s],", path);
+    image->w = (size_t) w;
+    image->h = (size_t) h;
+    image->c = (size_t) c;
+    memcpy((unsigned char*) image->buf, buf, (size_t) (w * h * c));
+    return image; 
 }
 
 vi_ImageIntensity 
-vi_ImageIntensity_from_ImageRaw(const vi_ImageRaw img) {
-    vi_ImageIntensity img_i;
-    img_i = calloc(1, sizeof(*img_i) + (size_t) (img->w * img->h) * sizeof(double));
-    ASSERT_LOG(img_i != NULL, "Failed to allocate memory for image intensity.");
-    img_i->w = img->w;
-    img_i->h = img->h;
-    double* buf = (double*) img_i->buf;
-    for(size_t i = 0, j; i < img->w * img->h; ++i) {
-        for(j = 0; j < img->c; ++j) buf[i] += (double) img->buf[i * img->c + j];
-        buf[i] /= (double) img->c * 255.0;
+vi_ImageIntensity_from_ImageRaw(const vi_ImageRaw image_raw) {
+    vi_ImageIntensity image;
+    image = calloc(1, sizeof(*image) + (size_t) (image_raw->w * image_raw->h) * sizeof(double));
+    ASSERT_LOG(image != NULL, "Failed to allocate memory for image intensity.");
+    image->w = image_raw->w;
+    image->h = image_raw->h;
+    double* buf = (double*) image->buf;
+    for(size_t i = 0, j; i < image_raw->w * image_raw->h; ++i) {
+        for(j = 0; j < image_raw->c; ++j) buf[i] += (double) image_raw->buf[i * image_raw->c + j];
+        buf[i] /= (double) image_raw->c * 255.0;
     }
-    return img_i;
+    return image;
 }
 
 const double* 
-vi_ImageIntensity_buffer(vi_ImageIntensity img) {
-    return img->buf;
+vi_ImageIntensity_buffer(vi_ImageIntensity image) {
+    return image->buf;
 }
 
 unsigned long
-vi_ImageIntensity_rows(vi_ImageIntensity img) {
-    return img->h;
+vi_ImageIntensity_rows(vi_ImageIntensity image) {
+    return image->h;
 }
 
 unsigned long
-vi_ImageIntensity_cols(vi_ImageIntensity img) {
-    return img->w;
+vi_ImageIntensity_cols(vi_ImageIntensity image) {
+    return image->w;
 }
 
 vi_Mat
-vi_ImageIntensity_to_Mat(vi_ImageIntensity img) {
-    vi_Mat mat = vi_Mat_init_zeros(img->h, img->w);
-    vi_Mat_it(mat) *it_val = img->buf[it_row * img->w + it_col];
+vi_ImageIntensity_to_Mat(vi_ImageIntensity image) {
+    vi_Mat mat = vi_Mat_init_zeros(image->h, image->w);
+    vi_Mat_it(mat) *it_val = image->buf[it_row * image->w + it_col];
     return mat;
 }
 
 vi_ImageIntensity
 vi_Mat_to_ImageIntensity(vi_Mat mat) {
-    vi_ImageIntensity img;
-    img = malloc(sizeof(*img) + sizeof(double) * vi_Mat_rows(mat) * vi_Mat_cols(mat));
-    img->h = vi_Mat_rows(mat);
-    img->w = vi_Mat_cols(mat);
-    vi_Mat_it(mat) ((double*) img->buf)[it_col + it_row * vi_Mat_cols(mat)] = *it_val;
-    return img;
+    vi_ImageIntensity image;
+    image = malloc(sizeof(*image) + sizeof(double) * vi_Mat_rows(mat) * vi_Mat_cols(mat));
+    image->h = vi_Mat_rows(mat);
+    image->w = vi_Mat_cols(mat);
+    vi_Mat_it(mat) ((double*) image->buf)[it_col + it_row * vi_Mat_cols(mat)] = *it_val;
+    return image;
 }
 
 struct plotter_data {
     GLuint shader;
-    vi_ImageIntensity img;
+    vi_ImageIntensity image;
     GLuint tex;
     GLuint VAO, VBO, EBO;
 };
@@ -160,10 +160,10 @@ image_intensity_plotter_config(void* data) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    vi_ImageIntensity img = plotter_data->img;
-    float* buf = malloc(sizeof(float) * img->w * img->h);
-    for(size_t i = 0; i < img->w * img->h; i++) buf[i] = (float) img->buf[i];
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, (GLsizei) img->w, (GLsizei) img->h, 0, GL_RED, GL_FLOAT, buf);
+    vi_ImageIntensity image = plotter_data->image;
+    float* buf = malloc(sizeof(float) * image->w * image->h);
+    for(size_t i = 0; i < image->w * image->h; i++) buf[i] = (float) image->buf[i];
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, (GLsizei) image->w, (GLsizei) image->h, 0, GL_RED, GL_FLOAT, buf);
     free(buf);
     glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, (GLint[]) { GL_RED, GL_RED, GL_RED, GL_ONE });
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -189,12 +189,12 @@ image_intensity_plotter_deinit(void* data) {
 }
 
 vi_Plotter
-vi_ImageIntensity_plotter(vi_ImageIntensity img) {
+vi_ImageIntensity_plotter(vi_ImageIntensity image) {
     vi_Plotter layer = vi_Plotter_init(
         sizeof(struct plotter_data),
         image_intensity_plotter_config,
         image_intensity_plotter_render,
         image_intensity_plotter_deinit);
-    ((struct plotter_data*) vi_Plotter_data(layer))->img = img;
+    ((struct plotter_data*) vi_Plotter_data(layer))->image = image;
     return layer;
 }

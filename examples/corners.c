@@ -3,6 +3,7 @@
 #include <stb_ds.h>
 #include <glenv.h>
 
+#include "feature.h"
 #include "vistack.h"
 
 
@@ -15,6 +16,8 @@ int main(int argc, char* argv[]) {
         printf("[ERROR] Must provide path to 2 images.\n");
         return 1;
     }
+
+    vi_start();
 
     // load images
     vi_ImageRaw image_temp;
@@ -39,18 +42,26 @@ int main(int argc, char* argv[]) {
     vi_Mat_free(kernel);
 
     vi_CornerList corners_a, corners_b;
-    corners_a = vi_CornerList_init(data_a, vi_HarrisDetector, HARRIS_THRESHOLD);
-    corners_b = vi_CornerList_init(data_b, vi_HarrisDetector, HARRIS_THRESHOLD);
+    corners_a = vi_CornerList_init(data_a, vi_CornerDetector_Harris, HARRIS_THRESHOLD);
+    corners_b = vi_CornerList_init(data_b, vi_CornerDetector_Harris, HARRIS_THRESHOLD);
     
     // plot the images
     vi_Plot plot;
-    plot = vi_Plot_init("corner detection", 1, 2);
+    plot = vi_Plot_init("corners", 1, 2);
     vi_Plot_add_layer(plot, 0, 0, vi_ImageIntensity_plotter(image_a));
     vi_Plot_add_layer(plot, 0, 0, vi_CornerList_plot(data_a, corners_a));
     vi_Plot_add_layer(plot, 1, 0, vi_ImageIntensity_plotter(image_b));
     vi_Plot_add_layer(plot, 1, 0, vi_CornerList_plot(data_b, corners_b));
     vi_Plot_show(plot);
     vi_Plot_free(plot);
+
+    // descriptors
+    vi_Desc desc_a = vi_Desc_init(data_a, &corners_a, vi_DescBuilder_SIFT);
+    vi_Desc desc_b = vi_Desc_init(data_b, &corners_b, vi_DescBuilder_SIFT);
+    vi_Desc_show(desc_a);
+    vi_Desc_show(desc_b);
+    vi_Desc_free(desc_a);
+    vi_Desc_free(desc_b);
 
     // clean up
     vi_ImageData_free(data_a);
@@ -59,6 +70,8 @@ int main(int argc, char* argv[]) {
     vi_CornerList_free(corners_b);
     free(image_a);
     free(image_b);
+
+    vi_finish();
 
     return 0;
 }
